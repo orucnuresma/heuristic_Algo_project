@@ -14,6 +14,8 @@
 #   - Penalty: R = 0.7 * sum(viol_low) + 0.3 * sum(viol_high)
 # ============================================================
 
+NUTRIENT_IDS = [1, 2, 3, 4, 5]
+BREAKFAST_IDS = [1, 2]
 
 def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
     """
@@ -56,7 +58,93 @@ def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
     #    - 5 nutrient icin ayni mantik (RUL_eff, RLL_eff)
     # 6. return kahvalti_secilen + ogle_aksam_secilen
     #
-    raise NotImplementedError("decode_chromosome henuz implement edilmedi")
+    breakfast_part, lunch_part = individual
+
+    def get_limits():
+        limits = {}
+        for nutrient_id in NUTRIENT_IDS:
+            row = dri_df[dri_df["nutrient_id"] == nutrient_id]
+            if not row.empty:
+                limits[nutrient_id] = {
+                    "RLL": float(row.iloc[0]["RLL"]),
+                    "RUL": float(row.iloc[0]["RUL"])
+                }
+        return limits
+    
+    def nutrient_totals(food_ids):
+        selected = nutrients_df[nutrients_df["foodId"].isin(food_ids)]
+        totals = selected.groupby("nutrientId")["quantity"].sum().to_dict()
+    
+        for nutrient_id in NUTRIENT_IDS:
+            totals.setdefault(nutrient_id, 0.0)
+    
+        return totals
+    
+    limits = get_limits()
+    
+    selected_breakfast = []
+    
+    for food_id in breakfast_part:
+        temp_foods = selected_breakfast + [food_id]
+        totals = nutrient_totals(temp_foods)
+    
+        exceed = False
+        for nutrient_id in BREAKFAST_IDS:
+            rul_b = limits[nutrient_id]["RUL"] * 0.35
+            rul_eff = rul_b * 1.15
+    
+            if totals[nutrient_id] > rul_eff:
+                exceed = True
+                break
+    
+        if not exceed:
+            selected_breakfast.append(food_id)
+    
+        totals = nutrient_totals(selected_breakfast)
+    
+        breakfast_ok = True
+        for nutrient_id in BREAKFAST_IDS:
+            rll_b = limits[nutrient_id]["RLL"] * 0.35
+            rll_eff = rll_b * 0.90
+    
+            if totals[nutrient_id] < rll_eff:
+                breakfast_ok = False
+                break
+    
+        if breakfast_ok:
+            break
+    
+    selected_all = selected_breakfast[:]
+    
+    for food_id in lunch_part:
+        temp_foods = selected_all + [food_id]
+        totals = nutrient_totals(temp_foods)
+    
+        exceed = False
+        for nutrient_id in NUTRIENT_IDS:
+            rul_eff = limits[nutrient_id]["RUL"] * 1.15
+    
+            if totals[nutrient_id] > rul_eff:
+                exceed = True
+                break
+    
+        if not exceed:
+            selected_all.append(food_id)
+    
+        totals = nutrient_totals(selected_all)
+    
+        all_ok = True
+        for nutrient_id in NUTRIENT_IDS:
+            rll_eff = limits[nutrient_id]["RLL"] * 0.90
+    
+            if totals[nutrient_id] < rll_eff:
+                all_ok = False
+                break
+    
+        if all_ok:
+            break
+    
+    return selected_all
 
 
 def calculate_penalty(selected_foods, foods_df, nutrients_df, dri_df, user_info):
@@ -97,4 +185,33 @@ def calculate_penalty(selected_foods, foods_df, nutrients_df, dri_df, user_info)
     # 4. R = 0.7 * sum(viol_low) + 0.3 * sum(viol_high)
     # 5. return R
     #
-    raise NotImplementedError("calculate_penalty henuz implement edilmedi")
+   
+    selected = nutrients_df[nutrients_df["foodId"].isin(selected_foods)]
+    totals = selected.groupby("nutrientId")["quantity"].sum().to_dict()
+    
+    total_low_violation = 0.0
+    total_high_violation = 0.0
+    
+    for nutrient_id in NUTRIENT_IDS:
+        row = dri_df[dri_df["nutrient_id"] == nutrient_id]
+    
+        if row.empty:
+            continue
+    
+        rll = float(row.iloc[0]["RLL"])
+        rul = float(row.iloc[0]["RUL"])
+        value = float(totals.get(nutrient_id, 0.0))
+    
+        denominator = rul - rll
+        if denominator <= 0:
+            denominator = 1.0
+    
+        viol_low = max(0.0, rll - value) / denominator
+        viol_high = max(0.0, value - rul) / denominator
+    
+        total_low_violation += viol_low
+        total_high_violation += viol_high
+    
+    R = 0.7 * total_low_violation + 0.3 * total_high_violation
+    
+    return R
