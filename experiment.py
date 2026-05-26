@@ -2,6 +2,7 @@ import random
 import math
 import csv
 import os
+import json
 from nsga2 import run_nsga2
 from spea2 import run_spea2
 
@@ -192,6 +193,33 @@ def save_convergence_to_csv(hv_history, filename, algorithm_name):
             writer.writerow([algorithm_name, gen + 1, hv])
 
     print(f"  Kaydedildi: {filepath}")
+    # ============================================================
+# JSON EXPORT
+# ============================================================
+
+def save_pareto_to_json(pareto_front, filename, experiment_name):
+
+    os.makedirs("results/json", exist_ok=True)
+
+    filepath = os.path.join("results/json", filename)
+
+    data = []
+
+    for idx, sol in enumerate(pareto_front):
+
+        entry = {
+            "experiment": experiment_name,
+            "solution_id": idx,
+            "fitness": list(sol["fitness"])
+        }
+
+        data.append(entry)
+
+    with open(filepath, "w", encoding="utf-8") as f:
+
+        json.dump(data, f, indent=4, ensure_ascii=False)
+
+    print(f"JSON kaydedildi: {filepath}")
 
 
 # ============================================================
@@ -324,16 +352,56 @@ def experiment_user_comparison(breakfast_ids, lunch_ids,
         label="User 2 (Vegetarian)"
     )
 
-    # CSV kaydet
+    # CSV + JSON kaydet
     for run in range(NUM_RUNS):
-        save_pareto_to_csv(result_u1["nsga2_results"][run],
-                           f"user1_nsga2_run{run+1}.csv", "user1_nsga2")
-        save_pareto_to_csv(result_u1["spea2_results"][run],
-                           f"user1_spea2_run{run+1}.csv", "user1_spea2")
-        save_pareto_to_csv(result_u2["nsga2_results"][run],
-                           f"user2_nsga2_run{run+1}.csv", "user2_nsga2")
-        save_pareto_to_csv(result_u2["spea2_results"][run],
-                           f"user2_spea2_run{run+1}.csv", "user2_spea2")
+
+        save_pareto_to_csv(
+        result_u1["nsga2_results"][run],
+        f"user1_nsga2_run{run+1}.csv",
+        "user1_nsga2"
+    )
+
+        save_pareto_to_json(
+        result_u1["nsga2_results"][run],
+        f"user1_nsga2_run{run+1}.json",
+        "user1_nsga2"
+    )
+
+        save_pareto_to_csv(
+        result_u1["spea2_results"][run],
+        f"user1_spea2_run{run+1}.csv",
+        "user1_spea2"
+    )
+
+        save_pareto_to_json(
+        result_u1["spea2_results"][run],
+        f"user1_spea2_run{run+1}.json",
+        "user1_spea2"
+    )
+
+        save_pareto_to_csv(
+        result_u2["nsga2_results"][run],
+        f"user2_nsga2_run{run+1}.csv",
+        "user2_nsga2"
+    )
+
+        save_pareto_to_json(
+        result_u2["nsga2_results"][run],
+        f"user2_nsga2_run{run+1}.json",
+        "user2_nsga2"
+    )
+
+        save_pareto_to_csv(
+        result_u2["spea2_results"][run],
+        f"user2_spea2_run{run+1}.csv",
+        "user2_spea2"
+    )
+
+        save_pareto_to_json(
+        result_u2["spea2_results"][run],
+        f"user2_spea2_run{run+1}.json",
+        "user2_spea2"
+    )
 
     return result_u1, result_u2
 
