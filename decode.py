@@ -1,49 +1,89 @@
 # ============================================================
-# GOREV 3: DECODE + CONSTRAINT / PENALTY (HATASIZ VE HIZLI)
+# GOREV 3: DECODE + CONSTRAINT / PENALTY (HATASIZ VE GERÇEKTEN HIZLI)
 # ============================================================
 import pandas as pd
 
-NUTRIENT_IDS = [1, 2, 3, 4, 5]
-BREAKFAST_IDS = [1, 2]
+# Veritabanındaki gerçek nutrient ID'leri
+NUTRIENT_IDS = [5, 15, 8, 4, 17]
+BREAKFAST_IDS = [5, 15]
 
-def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
+# Vejetaryen için yasaklı yemek grupları
+FORBIDDEN_GROUPS = [1, 2, 3]
+
+# --- HIZ OPTİMİZASYONU İÇİN GLOBAL ÖNBELLEK (CACHE) ---
+# Bunlar sadece 1 kere doldurulacak, her döngüde baştan hesaplanmayacak!
+GLOBAL_USER_LIMITS = {}
+GLOBAL_FOOD_MAP = {}
+GLOBAL_GROUP_MAP = {}
+
+def _filter_dri_for_user(dri_df, user_info):
     """
-    Kromozomu (genotype) menuye (phenotype) cevirir.
-    Soldan saga greedy decode: her yemegi tentative ekle,
-    epsilon*RUL asarsa atla.
+    dri tablosundan kullanıcının yaş ve cinsiyetine uyan satırları filtreler.
     """
-    breakfast_part, lunch_part = individual
+    age = user_info.get("age", 25)
+    gender = user_info.get("gender", "female").lower()
 
-    is_vegetarian = user_info.get("is_vegetarian", False)
-    # Veritabanındaki food_group tablosuna göre et, kümes ve deniz ürünleri ID'leri
-    FORBIDDEN_GROUPS = [1, 2, 3] 
+    filtered = dri_df[
+        (dri_df["low_age"] <= age) &
+        (dri_df["up_age"] >= age) &
+        (dri_df["gender"].str.lower() == gender)
+    ]
 
-    # Limitleri önceden çekelim
+    if filtered.empty:
+        filtered = dri_df[dri_df["gender"].str.lower() == gender]
+
+    return filtered
+
+def _build_cache(foods_df, nutrients_df, dri_df, user_info):
+    """Veritabanını sadece ilk seferde hızlı okunabilir sözlüklere çevirir."""
+    global GLOBAL_USER_LIMITS, GLOBAL_FOOD_MAP, GLOBAL_GROUP_MAP
+    
+    # Kullanıcı değişmediyse ve önbellek doluysa tekrar hesaplama
+    user_key = f"{user_info.get('age')}_{user_info.get('gender')}"
+    if user_key in GLOBAL_USER_LIMITS and GLOBAL_FOOD_MAP: 
+        return
+
+    # DRI limitlerini filtrele ve sözlüğe at
+    user_dri = _filter_dri_for_user(dri_df, user_info)
     limits = {}
     for nutrient_id in NUTRIENT_IDS:
-        row = dri_df[dri_df["nutrient_id"] == nutrient_id]
+        row = user_dri[user_dri["nutrient_id"] == nutrient_id]
         if not row.empty:
             limits[nutrient_id] = {
                 "RLL": float(row.iloc[0]["RLL"]),
                 "RUL": float(row.iloc[0]["RUL"])
             }
+        else:
+            limits[nutrient_id] = {"RLL": 0.0, "RUL": 1e9}
+    GLOBAL_USER_LIMITS[user_key] = limits
 
-    # Hız Optimizasyonu: Her döngüde groupby yapmamak için yemeklerin besin değerlerini dict'e alıyoruz
-    # nutrients_df içinde 'foodId', 'nutrientId' ve 'quantity' kolonları olduğu varsayılmıştır.
-    food_nutrient_map = {}
+    # Besin değerlerini sözlüğe at
+    GLOBAL_FOOD_MAP.clear()
     for _, r in nutrients_df.iterrows():
         f_id = int(r["foodId"])
         n_id = int(r["nutrientId"])
         qty = float(r["quantity"])
-        if f_id not in food_nutrient_map:
-            food_nutrient_map[f_id] = {nid: 0.0 for nid in NUTRIENT_IDS}
+        if f_id not in GLOBAL_FOOD_MAP:
+            GLOBAL_FOOD_MAP[f_id] = {nid: 0.0 for nid in NUTRIENT_IDS}
         if n_id in NUTRIENT_IDS:
-            food_nutrient_map[f_id][n_id] = qty
+            GLOBAL_FOOD_MAP[f_id][n_id] = qty
 
-    # Yemek grubu eşleşmesini hızlandırmak için dict yapıyoruz
-    # sql yapınıza göre kolon ismi 'food_group_id' veya 'food_group' olabilir, kontrol ediniz.
-    group_col = "food_group_id" if "food_group_id" in foods_df.columns else "food_group"
-    food_group_map = dict(zip(foods_df["id"], foods_df[group_col]))
+    # Yemek gruplarını sözlüğe at
+    group_col = "foodGroupId" if "foodGroupId" in foods_df.columns else "food_group"
+    GLOBAL_GROUP_MAP = dict(zip(foods_df["id"], foods_df[group_col]))
+
+
+def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
+    """Kromozomu menüye çevirir."""
+    
+    # 1 kere çalışır, sözlükleri doldurur. Sonraki döngülerde es geçer.
+    _build_cache(foods_df, nutrients_df, dri_df, user_info)
+    
+    user_key = f"{user_info.get('age')}_{user_info.get('gender')}"
+    limits = GLOBAL_USER_LIMITS[user_key]
+
+    breakfast_part, lunch_part = individual
+    is_vegetarian = user_info.get("is_vegetarian", False)
 
     # --- KAHVALTI DECODE ---
     selected_breakfast = []
@@ -51,18 +91,14 @@ def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
     
     for food_id in breakfast_part:
         if is_vegetarian:
-            f_group = food_group_map.get(food_id, None)
-            if f_group in FORBIDDEN_GROUPS:
-                continue  # Vejetaryense etli yemeği es geç
+            if GLOBAL_GROUP_MAP.get(food_id, None) in FORBIDDEN_GROUPS:
+                continue
         
-        # Yemeğin besin değerlerini al
-        nutrients = food_nutrient_map.get(food_id, {nid: 0.0 for nid in NUTRIENT_IDS})
+        nutrients = GLOBAL_FOOD_MAP.get(food_id, {nid: 0.0 for nid in NUTRIENT_IDS})
         
-        # Geçici üst limit kontrolü (Energy ve Protein için)
         exceed = False
         for nutrient_id in BREAKFAST_IDS:
-            rul_b = limits[nutrient_id]["RUL"] * 0.35
-            rul_eff = rul_b * 1.15
+            rul_eff = limits[nutrient_id]["RUL"] * 0.35 * 1.15
             if current_breakfast_totals[nutrient_id] + nutrients[nutrient_id] > rul_eff:
                 exceed = True
                 break
@@ -72,15 +108,12 @@ def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
             for nutrient_id in NUTRIENT_IDS:
                 current_breakfast_totals[nutrient_id] += nutrients[nutrient_id]
 
-            # Koşul sağlandıysa durma kontrolü (Energy VE Protein alt limiti geçtiyse)
-            breakfast_ok = True
-            for nutrient_id in BREAKFAST_IDS:
-                rll_eff = limits[nutrient_id]["RLL"] * 0.35 * 0.90
-                if current_breakfast_totals[nutrient_id] < rll_eff:
-                    breakfast_ok = False
-                    break
+            breakfast_ok = all(
+                current_breakfast_totals[nid] >= limits[nid]["RLL"] * 0.35 * 0.90
+                for nid in BREAKFAST_IDS
+            )
             if breakfast_ok:
-                break  # Hedef kahvaltı alt limitlerine ulaşıldı, döngüden çıkabiliriz.
+                break 
 
     # --- ÖĞLE + AKSAM DECODE ---
     selected_all = selected_breakfast[:]
@@ -88,13 +121,11 @@ def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
     
     for food_id in lunch_part:
         if is_vegetarian:
-            f_group = food_group_map.get(food_id, None)
-            if f_group in FORBIDDEN_GROUPS:
+            if GLOBAL_GROUP_MAP.get(food_id, None) in FORBIDDEN_GROUPS:
                 continue
 
-        nutrients = food_nutrient_map.get(food_id, {nid: 0.0 for nid in NUTRIENT_IDS})
+        nutrients = GLOBAL_FOOD_MAP.get(food_id, {nid: 0.0 for nid in NUTRIENT_IDS})
         
-        # Geçici üst limit kontrolü (5 Nutrient için)
         exceed = False
         for nutrient_id in NUTRIENT_IDS:
             rul_eff = limits[nutrient_id]["RUL"] * 1.15
@@ -107,41 +138,41 @@ def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
             for nutrient_id in NUTRIENT_IDS:
                 current_all_totals[nutrient_id] += nutrients[nutrient_id]
             
-            # Tüm 5 besin grubu da efektif alt limiti geçtiyse tamamdır
-            all_ok = True
-            for nutrient_id in NUTRIENT_IDS:
-                rll_eff = limits[nutrient_id]["RLL"] * 0.90
-                if current_all_totals[nutrient_id] < rll_eff:
-                    all_ok = False
-                    break
+            all_ok = all(
+                current_all_totals[nid] >= limits[nid]["RLL"] * 0.90
+                for nid in NUTRIENT_IDS
+            )
             if all_ok:
-                break  # Günlük menü besin hedeflerine ulaştı, başarılı sonlandırma.
+                break 
                 
     return selected_all
 
 
 def calculate_penalty(selected_foods, foods_df, nutrients_df, dri_df, user_info, diversity_on=False):
     """
-    Secilen menunun nutrient kisitlarini ne kadar ihlal ettigini hesaplar.
-    Ayrıca diversity_on=True ise yetersiz besin grubu çeşitliliğini cezalandırır.
+    Seçilen menünün nutrient kısıtlarını ne kadar ihlal ettiğini hesaplar.
     """
-    if not selected_foods:
-        return 999.0  # Menü boş kalırsa büyük bir ceza döndür
+    _build_cache(foods_df, nutrients_df, dri_df, user_info)
+    user_key = f"{user_info.get('age')}_{user_info.get('gender')}"
+    limits = GLOBAL_USER_LIMITS[user_key]
 
-    selected = nutrients_df[nutrients_df["foodId"].isin(selected_foods)]
-    totals = selected.groupby("nutrientId")["quantity"].sum().to_dict()
+    if not selected_foods:
+        return 999.0 
+
+    # Penalty kısmında da Pandas yerine hızlı sözlüğümüzü kullanıyoruz!
+    totals = {nid: 0.0 for nid in NUTRIENT_IDS}
+    for food_id in selected_foods:
+        nutrients = GLOBAL_FOOD_MAP.get(food_id, {nid: 0.0 for nid in NUTRIENT_IDS})
+        for nid in NUTRIENT_IDS:
+            totals[nid] += nutrients[nid]
     
     total_low_violation = 0.0
     total_high_violation = 0.0
     
     for nutrient_id in NUTRIENT_IDS:
-        row = dri_df[dri_df["nutrient_id"] == nutrient_id]
-        if row.empty:
-            continue
-    
-        rll = float(row.iloc[0]["RLL"])
-        rul = float(row.iloc[0]["RUL"])
-        value = float(totals.get(nutrient_id, 0.0))
+        rll = limits[nutrient_id]["RLL"]
+        rul = limits[nutrient_id]["RUL"]
+        value = totals.get(nutrient_id, 0.0)
     
         denominator = rul - rll
         if denominator <= 0:
@@ -157,14 +188,15 @@ def calculate_penalty(selected_foods, foods_df, nutrients_df, dri_df, user_info,
     
     # --- ÇEŞİTLİLİK (DIVERSITY) CEZASI ---
     if diversity_on:
-        group_col = "food_group_id" if "food_group_id" in foods_df.columns else "food_group"
-        selected_meta = foods_df[foods_df["id"].isin(selected_foods)]
-        unique_groups = selected_meta[group_col].nunique()
+        unique_groups = set()
+        for food_id in selected_foods:
+            group = GLOBAL_GROUP_MAP.get(food_id)
+            if group is not None:
+                unique_groups.add(group)
         
         HEDEF_GRUP_SAYISI = 4
-        if unique_groups < HEDEF_GRUP_SAYISI:
-            # Eksik kalan her grup için cezayı kümülatif ekle
-            diversity_penalty = (HEDEF_GRUP_SAYISI - unique_groups) * 1.5
+        if len(unique_groups) < HEDEF_GRUP_SAYISI:
+            diversity_penalty = (HEDEF_GRUP_SAYISI - len(unique_groups)) * 1.5
             R += diversity_penalty
     
     return R
