@@ -2,56 +2,50 @@ import random
 from genetic_operators import initialize_chromosome, apply_crossover, apply_mutation
 from decode import decode_chromosome, calculate_penalty
 
+# --- HIZ OPTİMİZASYONU İÇİN GLOBAL ÖNBELLEK ---
+GLOBAL_FOOD_METRICS = {}
 
-# ============================================================
-# FITNESS DEGERLENDIRME
-# ============================================================
-# Gorev 3'ten gelen fonksiyonlar:
-#   decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info)
-#       → selected_foods: list of food ID'leri (menuye secilen yemekler)
-#
-#   calculate_penalty(selected_foods, foods_df, nutrients_df, dri_df, user_info)
-#       → R: float (penalty degeri, 0 = ihlal yok)
-#
-# Gorev 3'u yapan arkadas bu iki fonksiyonu decode.py icinde tanimlamali.
+def _build_metrics_cache(foods_df):
+    global GLOBAL_FOOD_METRICS
+    if GLOBAL_FOOD_METRICS: return
+    for _, r in foods_df.iterrows():
+        f_id = int(r["id"])
+        GLOBAL_FOOD_METRICS[f_id] = {
+            "cost": float(r["cost"]),
+            "co2": float(r["co2"]),
+            "preference": float(r["preference"])
+        }
 
-LAMBDA = 1.0  # Penalty agirligi (PDF: lambda = 1.0 ile basla, deneysel ayarla)
+LAMBDA = 1.0  # Penalty agirligi
 
-
-def evaluate(individual, foods_df, nutrients_df, dri_df, user_info):
+def evaluate(individual, foods_df, nutrients_df, dri_df, user_info, diversity_enabled=False):
     """
     Kromozomu decode edip 3 objective degeri dondurur (hepsi MINIMIZE).
-    PDF kurali: 3 objective secilecek:
-      1) preference → MAX oldugu icin negatif alinir (-preference)
-      2) cost → MIN
-      3) co2 → MIN
-    Her objective'e penalty eklenir: obj + lambda * R
     """
-    # Adim 1: Kromozomu decode et → menuye secilen yemeklerin ID listesi
+    _build_metrics_cache(foods_df)
+
     selected_foods = decode_chromosome(
         individual, foods_df, nutrients_df, dri_df, user_info
     )
 
-    # Adim 2: Secilen yemeklerin objective degerlerini hesapla
-    selected_data = foods_df[foods_df["id"].isin(selected_foods)]
+    total_cost = 0.0
+    total_co2 = 0.0
+    total_preference = 0.0
 
-    total_cost = selected_data["cost"].sum()
-    total_co2 = selected_data["co2"].sum()
+    for f_id in selected_foods:
+        metrics = GLOBAL_FOOD_METRICS.get(f_id, {"cost": 0.0, "co2": 0.0, "preference": 0.0})
+        total_cost += metrics["cost"]
+        total_co2 += metrics["co2"]
+        total_preference += metrics["preference"]
 
-    # Preference: user_foods tablosundan kullaniciya ozel tercih puani alinir
-    # Eger user_info icinde user_id varsa user_foods'tan cekilir
-    # Yoksa foods tablosundaki preference kullanilir
-    total_preference = selected_data["preference"].sum()
-
-    # Adim 3: Penalty hesapla (nutrient kisitlarindan sapma)
+    # Çeşitlilik parametresini iletiyoruz
     R = calculate_penalty(
-        selected_foods, foods_df, nutrients_df, dri_df, user_info
+        selected_foods, foods_df, nutrients_df, dri_df, user_info, diversity_on=diversity_enabled
     )
 
-    # Adim 4: Penalized objective degerlerini dondur (hepsi MINIMIZE)
-    obj_preference = -total_preference + LAMBDA * R  # MAX → negatif al + penalty
-    obj_cost = total_cost + LAMBDA * R               # MIN + penalty
-    obj_co2 = total_co2 + LAMBDA * R                 # MIN + penalty
+    obj_preference = -total_preference + LAMBDA * R
+    obj_cost = total_cost + LAMBDA * R
+    obj_co2 = total_co2 + LAMBDA * R
 
     return [obj_preference, obj_cost, obj_co2]
 
@@ -198,7 +192,7 @@ def nsga2_tournament_selection(population, fitness_values, fronts):
 
 def run_nsga2(breakfast_ids, lunch_ids, pop_size, num_generations,
               foods_df, nutrients_df, dri_df, user_info,
-              crossover_rate=0.9, ref_point=None):
+              crossover_rate=0.9, ref_point=None, diversity_enabled=False):
     """
     NSGA-II ana dongusu. Populasyon olusturur, her jenerasyonda
     secim-crossover-mutasyon-birlestirme-siralama yapar.
@@ -213,7 +207,7 @@ def run_nsga2(breakfast_ids, lunch_ids, pop_size, num_generations,
         population.append(ind)
 
     fitness_values = [
-        evaluate(ind, foods_df, nutrients_df, dri_df, user_info)
+        evaluate(ind, foods_df, nutrients_df, dri_df, user_info, diversity_enabled)
         for ind in population
     ]
 
@@ -246,7 +240,7 @@ def run_nsga2(breakfast_ids, lunch_ids, pop_size, num_generations,
 
         # Cocuklarin fitness degerlerini hesapla
         offspring_fitness = [
-            evaluate(ind, foods_df, nutrients_df, dri_df, user_info)
+            evaluate(ind, foods_df, nutrients_df, dri_df, user_info, diversity_enabled)
             for ind in offspring
         ]
 

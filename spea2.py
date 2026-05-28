@@ -114,7 +114,7 @@ def spea2_environmental_selection(combined_pop, combined_fitness,
 
 def run_spea2(breakfast_ids, lunch_ids, pop_size, archive_size, num_generations,
               foods_df, nutrients_df, dri_df, user_info,
-              crossover_rate=0.9, ref_point=None):
+              crossover_rate=0.9, ref_point=None, diversity_enabled=False):
     """
     SPEA2 ana dongusu. Ayri bir arsiv tutar, her jenerasyonda
     fitness atama-arsiv guncelleme-secim-crossover-mutasyon yapar.
@@ -129,7 +129,7 @@ def run_spea2(breakfast_ids, lunch_ids, pop_size, archive_size, num_generations,
         population.append(ind)
 
     pop_fitness = [
-        evaluate(ind, foods_df, nutrients_df, dri_df, user_info)
+        evaluate(ind, foods_df, nutrients_df, dri_df, user_info, diversity_enabled)
         for ind in population
     ]
 
@@ -187,7 +187,7 @@ def run_spea2(breakfast_ids, lunch_ids, pop_size, archive_size, num_generations,
 
         population = new_population
         pop_fitness = [
-            evaluate(ind, foods_df, nutrients_df, dri_df, user_info)
+            evaluate(ind, foods_df, nutrients_df, dri_df, user_info, diversity_enabled)
             for ind in population
         ]
 
