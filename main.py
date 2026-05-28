@@ -16,8 +16,8 @@ def main():
     lunch_ids = foods_df['id'].tolist()[94:]
 
     # 3. Deney 1 için iki farklı kullanıcı profili (PDF'teki kural)
-    user1_info = {"user_id": 1, "age": 23, "gender": "female"}
-    user2_info = {"user_id": 2, "age": 23, "gender": "female"} # (Gerekirse vejetaryen eklenebilir)
+    user1_info = {"user_id": 1, "age": 23, "gender": "female", "is_vegetarian": False}
+    user2_info = {"user_id": 2, "age": 23, "gender": "female", "is_vegetarian": True}
 
     print("2. Algoritmalar ve Deneyler Başlıyor! (NSGA-II ve SPEA2 yarışıyor, bu işlem biraz sürebilir)...")
     
