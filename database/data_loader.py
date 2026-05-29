@@ -86,12 +86,14 @@ def load_users():
 # Kullanıcının yemek preference puanlarını çekiyor.
 # Hoca foods.preference yerine buranın kullanılmasını istemiş olabilir diye ayrı tuttum.
 def load_user_foods():
+    connection = get_connection()
     query = """
-    SELECT userId,
-           foodId,
-           preference
-    FROM user_foods
+        SELECT userId, foodId, preference
+        FROM user_foods
     """
+    df = pd.read_sql(query, connection)
+    connection.close()
+    return df
 
     return execute_query(query)
 
