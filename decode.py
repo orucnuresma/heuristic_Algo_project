@@ -3,17 +3,13 @@ import pandas as pd
 # --- VERİ TABANINDAN DOĞRULANAN ID'LER ---
 NUTRIENT_IDS = [5, 15, 8, 4, 17]  # Enerji, Protein, Kalsiyum, Demir vb.
 BREAKFAST_IDS = [5, 15]           # Kahvaltıda sadece Enerji (5) ve Protein (15) kontrol edilir
-
-# diet.sql tablosuna göre et, tavuk, balık ve etli yemek grupları
-MEAT_GROUP_IDS = [3, 4, 28]       
-
-HUGE_PENALTY = 1000000.0          # Çözümü doğrudan elemek için devasa ceza puanı
+MEAT_GROUP_IDS = [3, 4, 28]       # Et, tavuk, balık ve etli yemek grupları
+HUGE_PENALTY = 1000000.0          # Sert kısıt ihlalleri için devasa ceza puanı
 
 GLOBAL_USER_LIMITS = {}
 GLOBAL_FOOD_MAP = {}
 GLOBAL_GROUP_MAP = {}
 GLOBAL_PREF_MAP = {}
-
 
 def _get_col(df, possible_names):
     for col in possible_names:
@@ -21,22 +17,17 @@ def _get_col(df, possible_names):
             return col
     return None
 
-
 def _filter_dri_for_user(dri_df, user_info):
     age = user_info.get("age", 25)
     gender = str(user_info.get("gender", "female")).lower()
-
     filtered = dri_df[
         (dri_df["low_age"] <= age) &
         (dri_df["up_age"] >= age) &
         (dri_df["gender"].str.lower() == gender)
     ]
-
     if filtered.empty:
         filtered = dri_df[dri_df["gender"].str.lower() == gender]
-
     return filtered
-
 
 def get_preference_col(user_info):
     user_id = user_info.get("user_id", 1)
@@ -46,27 +37,25 @@ def get_preference_col(user_info):
         return "preference2"
     return "preference"
 
-
 def detect_vegetarian_from_preferences(foods_df, preference_col):
-    group_col = _get_col(foods_df, ["foodGroupId", "food_group", "foodGroupID", "food_group_id"])
+    group_col = _get_col(foods_df, ["foodGroupId", "food_group"])
     pref_col = _get_col(foods_df, [preference_col, preference_col.capitalize(), "Preference", "Preference2"])
-
     if group_col is None or pref_col is None:
         return False
-
     meat_foods = foods_df[foods_df[group_col].isin(MEAT_GROUP_IDS)]
     if meat_foods.empty:
         return False
-
-    # Eğer et yemeklerine -1 puan verilmişse bu kullanıcı VEJETARYENDİR
     return (meat_foods[pref_col] == -1).any()
 
-
-def _build_cache(foods_df, nutrients_df, dri_df, user_info):
+def _build_cache(foods_df, nutrients_df, dri_df, user_info, user_foods_df=None):
+    """
+    Kullanıcıya özel tercihleri ve veritabanı şemasını hatasız hafızaya alan dinamik cache.
+    """
     global GLOBAL_USER_LIMITS, GLOBAL_FOOD_MAP, GLOBAL_GROUP_MAP, GLOBAL_PREF_MAP
-
+    user_id = user_info.get("user_id", 1)
     user_key = f"{user_info.get('age')}_{user_info.get('gender')}"
 
+    # 1. DRI Limitleri Cache
     if user_key not in GLOBAL_USER_LIMITS:
         user_dri = _filter_dri_for_user(dri_df, user_info)
         limits = {}
@@ -81,79 +70,78 @@ def _build_cache(foods_df, nutrients_df, dri_df, user_info):
                 limits[nutrient_id] = {"RLL": 0.0, "RUL": 1e9}
         GLOBAL_USER_LIMITS[user_key] = limits
 
+    # 2. Besin İçerikleri Cache (Kızların getireceği 'quantity' sütun ismi korumalı)
     if not GLOBAL_FOOD_MAP:
+        val_col = _get_col(nutrients_df, ["quantity", "value", "Value"])
         for _, r in nutrients_df.iterrows():
             food_id = int(r["foodId"])
             nutrient_id = int(r["nutrientId"])
-            quantity = float(r["quantity"])
-
+            quantity_val = float(r[val_col])
             if food_id not in GLOBAL_FOOD_MAP:
                 GLOBAL_FOOD_MAP[food_id] = {nid: 0.0 for nid in NUTRIENT_IDS}
-
             if nutrient_id in NUTRIENT_IDS:
-                GLOBAL_FOOD_MAP[food_id][nutrient_id] = quantity
+                GLOBAL_FOOD_MAP[food_id][nutrient_id] = quantity_val
 
+    # 3. Yiyecek Grubu Haritası
     if not GLOBAL_GROUP_MAP:
-        group_col = _get_col(foods_df, ["foodGroupId", "food_group", "foodGroupID", "food_group_id"])
+        group_col = _get_col(foods_df, ["foodGroupId", "food_group"])
         GLOBAL_GROUP_MAP = dict(zip(foods_df["id"], foods_df[group_col]))
 
-    if not GLOBAL_PREF_MAP:
-        for col_name in ["preference", "preference2", "Preference", "Preference2"]:
+    # 4. Kişiye Özel Tercih Haritası (user_foods tablosu öncelikli kurgu)
+    GLOBAL_PREF_MAP = {}
+    if user_foods_df is not None and not user_foods_df.empty:
+        user_specific = user_foods_df[user_foods_df["userId"] == user_id]
+        if not user_specific.empty:
+            GLOBAL_PREF_MAP["active"] = dict(zip(user_specific["foodId"], user_specific["preference"]))
+            
+    if "active" not in GLOBAL_PREF_MAP:
+        preference_col = get_preference_col(user_info)
+        for col_name in [preference_col, preference_col.lower(), preference_col.capitalize()]:
             if col_name in foods_df.columns:
-                GLOBAL_PREF_MAP[col_name.lower()] = dict(zip(foods_df["id"], foods_df[col_name]))
+                GLOBAL_PREF_MAP["active"] = dict(zip(foods_df["id"], foods_df[col_name]))
+                break
 
-
-def _is_forbidden_food(food_id, user_info, preference_col):
+def _is_forbidden_food(food_id, user_info):
     is_vegetarian = user_info.get("is_vegetarian", False)
     food_group = GLOBAL_GROUP_MAP.get(food_id)
-
-    # Kural 1: Vejetaryen kullanıcı et grubu yiyemez
     if is_vegetarian and food_group in MEAT_GROUP_IDS:
         return True
-
-    # Kural 2: Puanı -1 olan yiyecek asla menüye giremez
-    pref_value = GLOBAL_PREF_MAP.get(preference_col.lower(), {}).get(food_id, 0)
+    pref_value = GLOBAL_PREF_MAP.get("active", {}).get(food_id, 0)
     if pref_value == -1:
         return True
-
     return False
-def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
-    """
-    SON UPDATE'İNE UYGUN YENİ DECODING MEKANİZMASI
-    individual[0] -> Kahvaltı genleri listesi
-    individual[1] -> Öğle + Akşam genleri listesi
-    """
-    _build_cache(foods_df, nutrients_df, dri_df, user_info)
-    preference_col = get_preference_col(user_info)
 
-    if "is_vegetarian" not in user_info:
-        user_info["is_vegetarian"] = detect_vegetarian_from_preferences(foods_df, preference_col)
 
+# ============================================================
+# ANA DECODE MEKANİZMASI
+# ============================================================
+
+def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info, user_foods_df=None):
+    _build_cache(foods_df, nutrients_df, dri_df, user_info, user_foods_df)
     user_key = f"{user_info.get('age')}_{user_info.get('gender')}"
     limits = GLOBAL_USER_LIMITS[user_key]
 
     breakfast_part, lunch_part = individual
-
     selected_breakfast = []
     current_breakfast_totals = {nid: 0.0 for nid in NUTRIENT_IDS}
     
-    # --- YENİ KURALI: KAHVALTI İÇİN SEÇİLEN TEK BİR GRUP TAKİBİ ---
-    breakfast_group_id = None  # İlk kabul edilen yiyeceğin grubu buraya kilitlenecek
+    # KURAL 1: Kahvaltı için tek grup kilitlenmesi takibi
+    breakfast_group_id = None  
 
-    # --- KAHVALTI PARÇASI DECODING ---
+    # --- KAHVALTI DECODING ---
     for food_id in breakfast_part:
-        if _is_forbidden_food(food_id, user_info, preference_col):
+        if _is_forbidden_food(food_id, user_info):
             continue
 
         food_group = GLOBAL_GROUP_MAP.get(food_id)
 
-        # UPDATE KURALI 1: Eğer bir grup kilitlendiyse ve bu yiyecek o gruptan değilse SIFIRLA/ATLA
+        # Eğer grup kilitlendiyse ve yiyecek o gruptan değilse kesinlikle atla
         if breakfast_group_id is not None and food_group != breakfast_group_id:
             continue
 
         nutrients = GLOBAL_FOOD_MAP.get(food_id, {nid: 0.0 for nid in NUTRIENT_IDS})
         
-        # Toleranslı Kahvaltı Üst Sınır Kontrolü (%35 RUL * 1.15)
+        # Üst Sınır Kontrolü (%35 RUL * 1.15)
         exceed = False
         for nutrient_id in BREAKFAST_IDS:
             rul_eff = limits[nutrient_id]["RUL"] * 0.35 * 1.15
@@ -162,7 +150,6 @@ def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
                 break
 
         if not exceed:
-            # İlk yiyecek eklendiğinde kahvaltı grubunu sabitle/kilitle
             if breakfast_group_id is None:
                 breakfast_group_id = food_group
 
@@ -170,8 +157,7 @@ def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
             for nutrient_id in NUTRIENT_IDS:
                 current_breakfast_totals[nutrient_id] += nutrients[nutrient_id]
 
-            # UPDATE KURALI 3: Enerji ve Protein %35 alt sınırını (RLL * 0.35 * 0.90) 
-            # AYNI ANDA geçtiğimiz an kahvaltı durur!
+            # KURAL 2: Enerji ve Protein %35 alt sınırını AYNI ANDA geçtiğimiz an BREAK!
             breakfast_ok = all(
                 current_breakfast_totals[nid] >= limits[nid]["RLL"] * 0.35 * 0.90
                 for nid in BREAKFAST_IDS
@@ -179,17 +165,17 @@ def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
             if breakfast_ok:
                 break
 
-    # --- ÖĞLE + AKŞAM PARÇASI DECODING ---
+    # --- ÖĞLE + AKŞAM DECODING ---
     selected_all = selected_breakfast[:]
     current_all_totals = current_breakfast_totals.copy()
 
     for food_id in lunch_part:
-        if _is_forbidden_food(food_id, user_info, preference_col):
+        if _is_forbidden_food(food_id, user_info):
             continue
 
         nutrients = GLOBAL_FOOD_MAP.get(food_id, {nid: 0.0 for nid in NUTRIENT_IDS})
 
-        # Tüm Günlük Toleranslı Üst Sınır Kontrolü (RUL * 1.15)
+        # Günlük Toleranslı Üst Sınır Kontrolü (RUL * 1.15)
         exceed = False
         for nutrient_id in NUTRIENT_IDS:
             rul_eff = limits[nutrient_id]["RUL"] * 1.15
@@ -205,65 +191,40 @@ def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
     return selected_all
 
 
+# ============================================================
+# CEZA (PENALTY) MOTORU
+# ============================================================
 
+def calculate_penalty(selected_foods, foods_df, nutrients_df, dri_df, user_info, user_foods_df=None, diversity_on=True):
+    _build_cache(foods_df, nutrients_df, dri_df, user_info, user_foods_df)
 
-def calculate_penalty(selected_foods, foods_df, nutrients_df, dri_df, user_info, diversity_on=True):
-    """
-    SON UPDATE'İNE UYGUN YENİ CEZA FONKSİYONU
-    Öğle+Akşam yemeğinde en az 4 farklı grup kısıtını (Hard Constraint) kontrol eder.
-    """
-    _build_cache(foods_df, nutrients_df, dri_df, user_info)
-    preference_col = get_preference_col(user_info)
-
-    if "is_vegetarian" not in user_info:
-        user_info["is_vegetarian"] = detect_vegetarian_from_preferences(foods_df, preference_col)
-
-    # EN BAŞTA KRİTİK KONTROL: Eğer boş menüyse doğrudan elensin
     if not selected_foods:
         return HUGE_PENALTY
 
-    # --- YENİ KURALI: LUNCH+DINNER İÇİN EN AZ 4 FARKLI GRUP KONTROLÜ ---
-    # decode_chromosome fonksiyonu kahvaltılıkları listenin başına, akşam yemeklerini sonuna ekler.
-    # Kahvaltıda kaç yemek olduğunu ve gruplarını buluyoruz:
-    breakfast_group_id = None
-    breakfast_count = 0
+    # KURAL 3: Sıralamadan bağımsız olarak Lunch+Dinner yiyeceklerini ayırıp grup sayma
+    breakfast_group_id = GLOBAL_GROUP_MAP.get(selected_foods[0]) if selected_foods else None
+    lunch_dinner_foods = [fid for fid in selected_foods if GLOBAL_GROUP_MAP.get(fid) != breakfast_group_id]
     
-    for food_id in selected_foods:
-        group = GLOBAL_GROUP_MAP.get(food_id)
-        if breakfast_group_id is None:
-            breakfast_group_id = group
-        if group == breakfast_group_id:
-            breakfast_count += 1
-        else:
-            # Kahvaltı grubu dışındaki ilk yiyeceğe geldiğimiz an kahvaltı bitmiş demektir
-            break
-            
-    # Sadece Lunch+Dinner kısmına kalan yiyecekleri ayırıyoruz
-    lunch_dinner_foods = selected_foods[breakfast_count:]
-    
-    # Öğle ve akşam yemeklerinin dahil olduğu benzersiz grupları hesapla
     lunch_dinner_groups = set()
     for food_id in lunch_dinner_foods:
         g_id = GLOBAL_GROUP_MAP.get(food_id)
         if g_id is not None:
             lunch_dinner_groups.add(g_id)
 
-    # UPDATE KURALI 2: Eğer Lunch+Dinner kısmı 4 farklı gruptan az içeriyorsa HARD VIOLATION!
+    # ÖNEMLİ DÜZELTME: Algoritma kilitlenmesin (Front: 0 çıkmasın) diye KADEMELİ ceza kurgusu!
     if len(lunch_dinner_groups) < 4:
-        return HUGE_PENALTY  # Doğrudan elenmesi için devasa ceza puanı döndür
+        return 500000.0 * (4 - len(lunch_dinner_groups))
 
-    # --- ESKİ YASAKLI VE VEJETARYEN KONTROLLERİ AYNEN DEVAM EDİYOR ---
+    # Yasaklı ve vejetaryen kontrolleri
     for food_id in selected_foods:
         food_group = GLOBAL_GROUP_MAP.get(food_id)
-        pref_value = GLOBAL_PREF_MAP.get(preference_col.lower(), {}).get(food_id, 0)
-        
+        pref_value = GLOBAL_PREF_MAP.get("active", {}).get(food_id, 0)
         if pref_value == -1 or (user_info.get("is_vegetarian", False) and food_group in MEAT_GROUP_IDS):
             return HUGE_PENALTY  
 
     user_key = f"{user_info.get('age')}_{user_info.get('gender')}"
     limits = GLOBAL_USER_LIMITS[user_key]
 
-    # Toplam besin değerlerini hesapla
     totals = {nid: 0.0 for nid in NUTRIENT_IDS}
     for food_id in selected_foods:
         nutrients = GLOBAL_FOOD_MAP.get(food_id, {nid: 0.0 for nid in NUTRIENT_IDS})
@@ -273,7 +234,7 @@ def calculate_penalty(selected_foods, foods_df, nutrients_df, dri_df, user_info,
     total_low_violation = 0.0
     total_high_violation = 0.0
 
-    # Normalizasyon ve ceza hesabı
+    # Asimetrik (0.7 / 0.3) ceza formülü
     for nutrient_id in NUTRIENT_IDS:
         rll = limits[nutrient_id]["RLL"]
         rul = limits[nutrient_id]["RUL"]
@@ -282,7 +243,6 @@ def calculate_penalty(selected_foods, foods_df, nutrients_df, dri_df, user_info,
         if value < rll:
             viol_low = (rll - value) / (rll if rll > 0 else 1.0)
             total_low_violation += viol_low
-        
         if value > rul:
             viol_high = (value - rul) / (rul if rul > 0 else 1.0)
             total_high_violation += viol_high
@@ -290,9 +250,7 @@ def calculate_penalty(selected_foods, foods_df, nutrients_df, dri_df, user_info,
     R = (0.7 * total_low_violation) + (0.3 * total_high_violation)
     penalty = R
 
-    # --- DIVERSITY ETKİSİ AÇIKSA (Ekstra Yumuşak Ceza) ---
     if diversity_on:
-        # Tüm menüdeki toplam benzersiz grup sayısına göre ufak bir ceza eklemeye devam edebiliriz
         all_groups = set(GLOBAL_GROUP_MAP.get(fid) for fid in selected_foods if GLOBAL_GROUP_MAP.get(fid) is not None)
         HEDEF_GRUP_SAYISI = 5
         if len(all_groups) < HEDEF_GRUP_SAYISI:
