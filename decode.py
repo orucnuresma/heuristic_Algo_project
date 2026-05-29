@@ -119,7 +119,7 @@ def _is_forbidden_food(food_id, user_info, preference_col):
     return False
 def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
     """
-    HOCANIN SON UPDATE'İNE UYGUN YENİ DECODING MEKANİZMASI
+    SON UPDATE'İNE UYGUN YENİ DECODING MEKANİZMASI
     individual[0] -> Kahvaltı genleri listesi
     individual[1] -> Öğle + Akşam genleri listesi
     """
@@ -137,7 +137,7 @@ def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
     selected_breakfast = []
     current_breakfast_totals = {nid: 0.0 for nid in NUTRIENT_IDS}
     
-    # --- HOCANIN YENİ KURALI: KAHVALTI İÇİN SEÇİLEN TEK BİR GRUP TAKİBİ ---
+    # --- YENİ KURALI: KAHVALTI İÇİN SEÇİLEN TEK BİR GRUP TAKİBİ ---
     breakfast_group_id = None  # İlk kabul edilen yiyeceğin grubu buraya kilitlenecek
 
     # --- KAHVALTI PARÇASI DECODING ---
@@ -147,7 +147,7 @@ def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
 
         food_group = GLOBAL_GROUP_MAP.get(food_id)
 
-        # HOCA UPDATE KURALI 1: Eğer bir grup kilitlendiyse ve bu yiyecek o gruptan değilse SIFIRLA/ATLA
+        # UPDATE KURALI 1: Eğer bir grup kilitlendiyse ve bu yiyecek o gruptan değilse SIFIRLA/ATLA
         if breakfast_group_id is not None and food_group != breakfast_group_id:
             continue
 
@@ -170,7 +170,7 @@ def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
             for nutrient_id in NUTRIENT_IDS:
                 current_breakfast_totals[nutrient_id] += nutrients[nutrient_id]
 
-            # HOCA UPDATE KURALI 3: Enerji ve Protein %35 alt sınırını (RLL * 0.35 * 0.90) 
+            # UPDATE KURALI 3: Enerji ve Protein %35 alt sınırını (RLL * 0.35 * 0.90) 
             # AYNI ANDA geçtiğimiz an kahvaltı durur!
             breakfast_ok = all(
                 current_breakfast_totals[nid] >= limits[nid]["RLL"] * 0.35 * 0.90
@@ -209,7 +209,7 @@ def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
 
 def calculate_penalty(selected_foods, foods_df, nutrients_df, dri_df, user_info, diversity_on=True):
     """
-    HOCANIN SON UPDATE'İNE UYGUN YENİ CEZA FONKSİYONU
+    SON UPDATE'İNE UYGUN YENİ CEZA FONKSİYONU
     Öğle+Akşam yemeğinde en az 4 farklı grup kısıtını (Hard Constraint) kontrol eder.
     """
     _build_cache(foods_df, nutrients_df, dri_df, user_info)
@@ -222,7 +222,7 @@ def calculate_penalty(selected_foods, foods_df, nutrients_df, dri_df, user_info,
     if not selected_foods:
         return HUGE_PENALTY
 
-    # --- HOCANIN YENİ KURALI: LUNCH+DINNER İÇİN EN AZ 4 FARKLI GRUP KONTROLÜ ---
+    # --- YENİ KURALI: LUNCH+DINNER İÇİN EN AZ 4 FARKLI GRUP KONTROLÜ ---
     # decode_chromosome fonksiyonu kahvaltılıkları listenin başına, akşam yemeklerini sonuna ekler.
     # Kahvaltıda kaç yemek olduğunu ve gruplarını buluyoruz:
     breakfast_group_id = None
@@ -248,7 +248,7 @@ def calculate_penalty(selected_foods, foods_df, nutrients_df, dri_df, user_info,
         if g_id is not None:
             lunch_dinner_groups.add(g_id)
 
-    # HOCA UPDATE KURALI 2: Eğer Lunch+Dinner kısmı 4 farklı gruptan az içeriyorsa HARD VIOLATION!
+    # UPDATE KURALI 2: Eğer Lunch+Dinner kısmı 4 farklı gruptan az içeriyorsa HARD VIOLATION!
     if len(lunch_dinner_groups) < 4:
         return HUGE_PENALTY  # Doğrudan elenmesi için devasa ceza puanı döndür
 
