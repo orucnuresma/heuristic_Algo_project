@@ -117,11 +117,9 @@ def _is_forbidden_food(food_id, user_info, preference_col):
         return True
 
     return False
-
-
 def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
     """
-    İki parçalı kromozomu çözer (Knapsack Seçim Filtrelemesi)
+    HOCANIN SON UPDATE'İNE UYGUN YENİ DECODING MEKANİZMASI
     individual[0] -> Kahvaltı genleri listesi
     individual[1] -> Öğle + Akşam genleri listesi
     """
@@ -138,10 +136,19 @@ def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
 
     selected_breakfast = []
     current_breakfast_totals = {nid: 0.0 for nid in NUTRIENT_IDS}
+    
+    # --- HOCANIN YENİ KURALI: KAHVALTI İÇİN SEÇİLEN TEK BİR GRUP TAKİBİ ---
+    breakfast_group_id = None  # İlk kabul edilen yiyeceğin grubu buraya kilitlenecek
 
     # --- KAHVALTI PARÇASI DECODING ---
     for food_id in breakfast_part:
         if _is_forbidden_food(food_id, user_info, preference_col):
+            continue
+
+        food_group = GLOBAL_GROUP_MAP.get(food_id)
+
+        # HOCA UPDATE KURALI 1: Eğer bir grup kilitlendiyse ve bu yiyecek o gruptan değilse SIFIRLA/ATLA
+        if breakfast_group_id is not None and food_group != breakfast_group_id:
             continue
 
         nutrients = GLOBAL_FOOD_MAP.get(food_id, {nid: 0.0 for nid in NUTRIENT_IDS})
@@ -155,9 +162,22 @@ def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
                 break
 
         if not exceed:
+            # İlk yiyecek eklendiğinde kahvaltı grubunu sabitle/kilitle
+            if breakfast_group_id is None:
+                breakfast_group_id = food_group
+
             selected_breakfast.append(food_id)
             for nutrient_id in NUTRIENT_IDS:
                 current_breakfast_totals[nutrient_id] += nutrients[nutrient_id]
+
+            # HOCA UPDATE KURALI 3: Enerji ve Protein %35 alt sınırını (RLL * 0.35 * 0.90) 
+            # AYNI ANDA geçtiğimiz an kahvaltı durur!
+            breakfast_ok = all(
+                current_breakfast_totals[nid] >= limits[nid]["RLL"] * 0.35 * 0.90
+                for nid in BREAKFAST_IDS
+            )
+            if breakfast_ok:
+                break
 
     # --- ÖĞLE + AKŞAM PARÇASI DECODING ---
     selected_all = selected_breakfast[:]
@@ -185,9 +205,12 @@ def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info):
     return selected_all
 
 
+
+
 def calculate_penalty(selected_foods, foods_df, nutrients_df, dri_df, user_info, diversity_on=True):
     """
-    Hocanın dökümanındaki asimetrik (0.7 / 0.3) ceza fonksiyonunu hesaplar.
+    HOCANIN SON UPDATE'İNE UYGUN YENİ CEZA FONKSİYONU
+    Öğle+Akşam yemeğinde en az 4 farklı grup kısıtını (Hard Constraint) kontrol eder.
     """
     _build_cache(foods_df, nutrients_df, dri_df, user_info)
     preference_col = get_preference_col(user_info)
@@ -195,16 +218,47 @@ def calculate_penalty(selected_foods, foods_df, nutrients_df, dri_df, user_info,
     if "is_vegetarian" not in user_info:
         user_info["is_vegetarian"] = detect_vegetarian_from_preferences(foods_df, preference_col)
 
-    # EN BAŞTA KRİTİK KONTROL: Eğer boş menüyse veya yasaklı yiyecek sızdıysa doğrudan elensin
+    # EN BAŞTA KRİTİK KONTROL: Eğer boş menüyse doğrudan elensin
     if not selected_foods:
         return HUGE_PENALTY
 
+    # --- HOCANIN YENİ KURALI: LUNCH+DINNER İÇİN EN AZ 4 FARKLI GRUP KONTROLÜ ---
+    # decode_chromosome fonksiyonu kahvaltılıkları listenin başına, akşam yemeklerini sonuna ekler.
+    # Kahvaltıda kaç yemek olduğunu ve gruplarını buluyoruz:
+    breakfast_group_id = None
+    breakfast_count = 0
+    
+    for food_id in selected_foods:
+        group = GLOBAL_GROUP_MAP.get(food_id)
+        if breakfast_group_id is None:
+            breakfast_group_id = group
+        if group == breakfast_group_id:
+            breakfast_count += 1
+        else:
+            # Kahvaltı grubu dışındaki ilk yiyeceğe geldiğimiz an kahvaltı bitmiş demektir
+            break
+            
+    # Sadece Lunch+Dinner kısmına kalan yiyecekleri ayırıyoruz
+    lunch_dinner_foods = selected_foods[breakfast_count:]
+    
+    # Öğle ve akşam yemeklerinin dahil olduğu benzersiz grupları hesapla
+    lunch_dinner_groups = set()
+    for food_id in lunch_dinner_foods:
+        g_id = GLOBAL_GROUP_MAP.get(food_id)
+        if g_id is not None:
+            lunch_dinner_groups.add(g_id)
+
+    # HOCA UPDATE KURALI 2: Eğer Lunch+Dinner kısmı 4 farklı gruptan az içeriyorsa HARD VIOLATION!
+    if len(lunch_dinner_groups) < 4:
+        return HUGE_PENALTY  # Doğrudan elenmesi için devasa ceza puanı döndür
+
+    # --- ESKİ YASAKLI VE VEJETARYEN KONTROLLERİ AYNEN DEVAM EDİYOR ---
     for food_id in selected_foods:
         food_group = GLOBAL_GROUP_MAP.get(food_id)
         pref_value = GLOBAL_PREF_MAP.get(preference_col.lower(), {}).get(food_id, 0)
         
         if pref_value == -1 or (user_info.get("is_vegetarian", False) and food_group in MEAT_GROUP_IDS):
-            return HUGE_PENALTY  # Direkt maksimum cezayı döndür, algoritma bu çözümü ezsin.
+            return HUGE_PENALTY  
 
     user_key = f"{user_info.get('age')}_{user_info.get('gender')}"
     limits = GLOBAL_USER_LIMITS[user_key]
@@ -219,37 +273,29 @@ def calculate_penalty(selected_foods, foods_df, nutrients_df, dri_df, user_info,
     total_low_violation = 0.0
     total_high_violation = 0.0
 
-    # Hocanın dökümanındaki formüle göre normalizasyon ve ceza hesabı
+    # Normalizasyon ve ceza hesabı
     for nutrient_id in NUTRIENT_IDS:
         rll = limits[nutrient_id]["RLL"]
         rul = limits[nutrient_id]["RUL"]
         value = totals.get(nutrient_id, 0.0)
 
-        # Alt sınır ihlali (RLL altı) -> RLL ile normalize edilir
         if value < rll:
             viol_low = (rll - value) / (rll if rll > 0 else 1.0)
             total_low_violation += viol_low
         
-        # Üst sınır ihlali (RUL üstü) -> RUL ile normalize edilir
         if value > rul:
             viol_high = (value - rul) / (rul if rul > 0 else 1.0)
             total_high_violation += viol_high
 
-    # Asimetrik ceza formülü: R = 0.7 * Yetersiz_Beslenme + 0.3 * Aşırı_Beslenme
     R = (0.7 * total_low_violation) + (0.3 * total_high_violation)
     penalty = R
 
-    # --- ÇEŞİTLİLİK (DIVERSITY) MEKANİZMASI (Döküman Madde 6) ---
+    # --- DIVERSITY ETKİSİ AÇIKSA (Ekstra Yumuşak Ceza) ---
     if diversity_on:
-        unique_groups = set()
-        for food_id in selected_foods:
-            group = GLOBAL_GROUP_MAP.get(food_id)
-            if group is not None:
-                unique_groups.add(group)
-
-        HEDEF_GRUP_SAYISI = 5  # Dökümanda istenen 4-6 ideal çeşitlilik aralığı
-        if len(unique_groups) < HEDEF_GRUP_SAYISI:
-            # Çeşitlilik azaldıkça doğrusal ceza ekle
-            penalty += (HEDEF_GRUP_SAYISI - len(unique_groups)) * 2.0
+        # Tüm menüdeki toplam benzersiz grup sayısına göre ufak bir ceza eklemeye devam edebiliriz
+        all_groups = set(GLOBAL_GROUP_MAP.get(fid) for fid in selected_foods if GLOBAL_GROUP_MAP.get(fid) is not None)
+        HEDEF_GRUP_SAYISI = 5
+        if len(all_groups) < HEDEF_GRUP_SAYISI:
+            penalty += (HEDEF_GRUP_SAYISI - len(all_groups)) * 2.0
 
     return penalty
