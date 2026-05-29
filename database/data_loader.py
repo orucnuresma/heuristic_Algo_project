@@ -95,7 +95,7 @@ def load_user_foods():
     connection.close()
     return df
 
-    return execute_query(query)
+  
 
 # DRI tablosundaki nutrient sınırlarını çekiyor.
 # RLL = minimum değer
