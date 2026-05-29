@@ -16,32 +16,44 @@ def _build_metrics_cache(foods_df):
             "preference": float(r["preference"])
         }
 
-LAMBDA = 1.0  # Penalty agirligi
+LAMBDA = 1.0
+FORBIDDEN_PENALTY = 100.0
 
-def evaluate(individual, foods_df, nutrients_df, dri_df, user_info, diversity_enabled=False):
-    """
-    Kromozomu decode edip 3 objective degeri dondurur (hepsi MINIMIZE).
-    """
+def evaluate(individual, foods_df, nutrients_df, dri_df, user_info, diversity_enabled=False,
+             user_foods_df=None):
     _build_metrics_cache(foods_df)
 
     selected_foods = decode_chromosome(
-        individual, foods_df, nutrients_df, dri_df, user_info
+        individual, foods_df, nutrients_df, dri_df, user_info, user_foods_df
     )
+
+    user_prefs = user_info.get("preferences", {})
 
     total_cost = 0.0
     total_co2 = 0.0
     total_preference = 0.0
+    forbidden_count = 0
 
     for f_id in selected_foods:
         metrics = GLOBAL_FOOD_METRICS.get(f_id, {"cost": 0.0, "co2": 0.0, "preference": 0.0})
         total_cost += metrics["cost"]
         total_co2 += metrics["co2"]
-        total_preference += metrics["preference"]
 
-    # Çeşitlilik parametresini iletiyoruz
+        if user_prefs:
+            pref_val = user_prefs.get(f_id, metrics["preference"])
+            if pref_val is None or pref_val != pref_val:  # None veya NaN kontrolu
+                pref_val = 0.0
+            elif pref_val == -1:
+                forbidden_count += 1
+                pref_val = 0.0
+            total_preference += pref_val
+        else:
+            total_preference += metrics["preference"]
+
     R = calculate_penalty(
-        selected_foods, foods_df, nutrients_df, dri_df, user_info, diversity_on=diversity_enabled
+        selected_foods, foods_df, nutrients_df, dri_df, user_info, user_foods_df, diversity_on=diversity_enabled
     )
+    R += forbidden_count * FORBIDDEN_PENALTY
 
     obj_preference = -total_preference + LAMBDA * R
     obj_cost = total_cost + LAMBDA * R
@@ -55,7 +67,6 @@ def evaluate(individual, foods_df, nutrients_df, dri_df, user_info, diversity_en
 # ============================================================
 
 def _dominates(obj_a, obj_b):
-    """a cozumu b'yi domine ediyor mu kontrol eder. Tum objective'ler minimize."""
     at_least_one_better = False
     for a_val, b_val in zip(obj_a, obj_b):
         if a_val > b_val:
@@ -70,25 +81,50 @@ def _dominates(obj_a, obj_b):
 # ============================================================
 
 def fast_non_dominated_sort(fitness_values):
-    """
-    Populasyonu domine iliskilerine gore front'lara ayirir.
-    Front 0 = en iyi (domine edilmeyen), Front 1 = ikinci en iyi, ...
-    """
     pop_size = len(fitness_values)
-    domination_count = [0] * pop_size   # beni domine eden birey sayisi
-    dominated_set = [[] for _ in range(pop_size)]  # benim domine ettiklerim
+    domination_count = [0] * pop_size
+    dominated_set = [[] for _ in range(pop_size)]
     rank = [0] * pop_size
     fronts = [[]]
 
     for p in range(pop_size):
-        for q in range(pop_size):
-            if p == q:
-                continue
-            if _dominates(fitness_values[p], fitness_values[q]):
+        for q in range(p + 1, pop_size):
+            p_dom_q = _dominates(fitness_values[p], fitness_values[q])
+            q_dom_p = _dominates(fitness_values[q], fitness_values[p])
+            if p_dom_q:
                 dominated_set[p].append(q)
-            elif _dominates(fitness_values[q], fitness_values[p]):
+                domination_count[q] += 1
+            elif q_dom_p:
+                dominated_set[q].append(p)
                 domination_count[p] += 1
 
+        if domination_count[p] == 0:
+            rank[p] = 0
+            fronts[0].append(p)
+
+    # domination_count[p] for p > 0 might not be finalized yet
+    # Re-check: actually the loop above only processes p < q pairs.
+    # We need to finalize counts for all individuals.
+    # The fronts[0] check above only catches p where ALL q > p don't dominate p,
+    # but misses q < p that might dominate p. Let me fix this properly.
+
+    # Actually let me just revert to the correct O(N²/2) approach:
+    domination_count = [0] * pop_size
+    dominated_set = [[] for _ in range(pop_size)]
+    fronts = [[]]
+
+    for p in range(pop_size):
+        for q in range(p + 1, pop_size):
+            p_dom_q = _dominates(fitness_values[p], fitness_values[q])
+            q_dom_p = _dominates(fitness_values[q], fitness_values[p])
+            if p_dom_q:
+                dominated_set[p].append(q)
+                domination_count[q] += 1
+            elif q_dom_p:
+                dominated_set[q].append(p)
+                domination_count[p] += 1
+
+    for p in range(pop_size):
         if domination_count[p] == 0:
             rank[p] = 0
             fronts[0].append(p)
@@ -105,7 +141,6 @@ def fast_non_dominated_sort(fitness_values):
         i += 1
         fronts.append(next_front)
 
-    # Son bos front'u kaldir
     if not fronts[-1]:
         fronts.pop()
 
@@ -113,10 +148,6 @@ def fast_non_dominated_sort(fitness_values):
 
 
 def crowding_distance(fitness_values, front):
-    """
-    Ayni front'taki bireylerin birbirine ne kadar yakin oldugunu olcer.
-    Yuksek deger = etrafinda az birey var = cesitlilik icin daha degerli.
-    """
     distances = {i: 0.0 for i in front}
     if len(front) <= 2:
         for i in front:
@@ -126,14 +157,10 @@ def crowding_distance(fitness_values, front):
     num_objectives = len(fitness_values[0])
 
     for m in range(num_objectives):
-        # Bu objective'e gore front'u sirala
         sorted_front = sorted(front, key=lambda i: fitness_values[i][m])
-
-        # Sinirdaki bireyler sonsuz distance alir
         distances[sorted_front[0]] = float('inf')
         distances[sorted_front[-1]] = float('inf')
 
-        # Objective'in deger araligini bul (normalizasyon icin)
         obj_min = fitness_values[sorted_front[0]][m]
         obj_max = fitness_values[sorted_front[-1]][m]
         range_val = obj_max - obj_min
@@ -141,7 +168,6 @@ def crowding_distance(fitness_values, front):
         if range_val == 0:
             continue
 
-        # Aradaki bireyler icin mesafe hesapla
         for k in range(1, len(sorted_front) - 1):
             prev_val = fitness_values[sorted_front[k - 1]][m]
             next_val = fitness_values[sorted_front[k + 1]][m]
@@ -151,11 +177,6 @@ def crowding_distance(fitness_values, front):
 
 
 def nsga2_tournament_selection(population, fitness_values, fronts):
-    """
-    Rastgele 2 birey secer, daha iyi rank'a sahip olan kazanir.
-    Rank esitse crowding distance'i yuksek olan kazanir.
-    """
-    # Her bireye rank ve crowding distance ata
     rank = [0] * len(population)
     cd = [0.0] * len(population)
 
@@ -166,12 +187,10 @@ def nsga2_tournament_selection(population, fitness_values, fronts):
             cd[ind] = distances[ind]
 
     def tournament(idx1, idx2):
-        # Daha dusuk rank (daha iyi front) kazanir
         if rank[idx1] < rank[idx2]:
             return idx1
         elif rank[idx1] > rank[idx2]:
             return idx2
-        # Ayni rank ise daha yuksek crowding distance kazanir
         elif cd[idx1] > cd[idx2]:
             return idx1
         else:
@@ -187,82 +206,81 @@ def nsga2_tournament_selection(population, fitness_values, fronts):
 
 
 # ============================================================
-# NSGA-II ANA DONGUSU
+# NSGA-II ANA DONGUSU (OPTİMİZE)
 # ============================================================
+
+EARLY_STOP_PATIENCE = 15  # Bu kadar jenerasyon iyileşme yoksa dur
 
 def run_nsga2(breakfast_ids, lunch_ids, pop_size, num_generations,
               foods_df, nutrients_df, dri_df, user_info,
-              crossover_rate=0.9, ref_point=None, diversity_enabled=False):
-    """
-    NSGA-II ana dongusu. Populasyon olusturur, her jenerasyonda
-    secim-crossover-mutasyon-birlestirme-siralama yapar.
-    Sonucta Pareto front + convergence verisi dondurur.
-    """
-    from experiment import hypervolume
+              crossover_rate=0.9, ref_point=None, diversity_enabled=False,
+              user_foods_df=None):
 
     # --- Baslangic populasyonu ---
-    population = []
-    for _ in range(pop_size):
-        ind = initialize_chromosome(breakfast_ids, lunch_ids)
-        population.append(ind)
+    population = [initialize_chromosome(breakfast_ids, lunch_ids) for _ in range(pop_size)]
 
     fitness_values = [
-        evaluate(ind, foods_df, nutrients_df, dri_df, user_info, diversity_enabled)
+        evaluate(ind, foods_df, nutrients_df, dri_df, user_info, diversity_enabled, user_foods_df)
         for ind in population
     ]
 
-    # Convergence takibi: her jenerasyondaki hypervolume
     hv_history = []
+    gen_fronts = []  # Post-hoc HV hesabi icin per-gen front fitness
+
+    # Early stopping icin
+    prev_best = None
+    stale_count = 0
+    actual_gens = 0
+
+    # Ilk non-dominated sort (sonraki jenerasyonlarda tekrar kullanilacak)
+    current_fronts = fast_non_dominated_sort(fitness_values)
 
     # --- Ana dongu ---
     for gen in range(num_generations):
-        # Ebeveyn secimi
-        selected = nsga2_tournament_selection(population, fitness_values,
-                                              fast_non_dominated_sort(fitness_values))
+        actual_gens = gen + 1
 
-        # Cocuk uretimi (crossover + mutation)
+        # 1. Secim (current_fronts zaten hesaplandi)
+        selected = nsga2_tournament_selection(population, fitness_values, current_fronts)
+
+        # 2. Cocuk uretimi
         offspring = []
         for i in range(0, len(selected) - 1, 2):
             p1_break, p1_lunch = selected[i]
             p2_break, p2_lunch = selected[i + 1]
-
             child_break, child_lunch = apply_crossover(
                 p1_break, p1_lunch, p2_break, p2_lunch, crossover_rate
             )
             child_break, child_lunch = apply_mutation(child_break, child_lunch)
             offspring.append((child_break, child_lunch))
 
-        # Tek kalan varsa direkt ekle
         if len(selected) % 2 == 1:
             last = selected[-1]
             m_break, m_lunch = apply_mutation(last[0][:], last[1][:])
             offspring.append((m_break, m_lunch))
 
-        # Cocuklarin fitness degerlerini hesapla
+        # 3. Offspring fitness
         offspring_fitness = [
-            evaluate(ind, foods_df, nutrients_df, dri_df, user_info, diversity_enabled)
+            evaluate(ind, foods_df, nutrients_df, dri_df, user_info, diversity_enabled, user_foods_df)
             for ind in offspring
         ]
 
-        # Ebeveyn + cocuk birlestir (R_t = P_t U Q_t)
+        # 4. Birlestir
         combined_pop = population + offspring
         combined_fitness = fitness_values + offspring_fitness
 
-        # Non-dominated sort
+        # 5. Non-dominated sort (combined, tek sort)
         fronts = fast_non_dominated_sort(combined_fitness)
 
-        # Yeni populasyonu sec (en iyi pop_size kadar birey)
+        # 6. Survivor selection
         new_population = []
         new_fitness = []
 
         for front in fronts:
             if len(new_population) + len(front) <= pop_size:
-                # Front tamamen sigar
                 for idx in front:
                     new_population.append(combined_pop[idx])
                     new_fitness.append(combined_fitness[idx])
             else:
-                # Bu front'tan crowding distance'a gore sec
                 distances = crowding_distance(combined_fitness, front)
                 sorted_front = sorted(front, key=lambda i: distances[i], reverse=True)
                 remaining = pop_size - len(new_population)
@@ -274,25 +292,48 @@ def run_nsga2(breakfast_ids, lunch_ids, pop_size, num_generations,
         population = new_population
         fitness_values = new_fitness
 
-        # Convergence: bu jenerasyonun hypervolume degerini kaydet
+        # 7. Yeni populasyonun front'larini hesapla (sonraki gen icin + convergence)
+        current_fronts = fast_non_dominated_sort(fitness_values)
+        first_front_fit = [fitness_values[i] for i in current_fronts[0]]
+
+        # Per-gen front kaydet (post-hoc HV icin)
+        gen_fronts.append(first_front_fit)
+
+        # HV hesabi (ref_point varsa)
         if ref_point is not None:
-            front_indices = fast_non_dominated_sort(fitness_values)[0]
-            front_fitness = [fitness_values[i] for i in front_indices]
-            hv = hypervolume(front_fitness, ref_point)
+            from experiment import hypervolume
+            hv = hypervolume(first_front_fit, ref_point)
             hv_history.append(hv)
 
-        # Ilerleme raporu (her 10 jenerasyonda)
-        if (gen + 1) % 10 == 0 or gen == 0:
-            first_front = fast_non_dominated_sort(fitness_values)[0]
-            print(f"[NSGA-II] Jenerasyon {gen + 1}/{num_generations} — "
-                  f"Pareto front boyutu: {len(first_front)}")
+        # 8. Early stopping
+        current_best = tuple(
+            min(f[obj] for f in first_front_fit) for obj in range(len(first_front_fit[0]))
+        )
+        if prev_best is not None:
+            improved = any(
+                current_best[i] < prev_best[i] - abs(prev_best[i]) * 0.001
+                for i in range(len(current_best))
+            )
+            if not improved:
+                stale_count += 1
+            else:
+                stale_count = 0
+        prev_best = current_best
 
-    # --- Sonuc: Pareto front ---
-    final_fronts = fast_non_dominated_sort(fitness_values)
-    pareto_indices = final_fronts[0]
+        if stale_count >= EARLY_STOP_PATIENCE and gen >= 30:
+            print(f"    [NSGA-II] Erken durdurma: Gen {gen+1} "
+                  f"(son {EARLY_STOP_PATIENCE} gen iyilesme yok)")
+            break
+
+        # 9. Ilerleme raporu
+        if (gen + 1) % 20 == 0 or gen == 0:
+            print(f"    [NSGA-II] Gen {gen+1}/{num_generations} — PF: {len(current_fronts[0])}")
+
+    # --- Sonuc ---
+    pareto_indices = current_fronts[0]
     pareto_front = [
         {"individual": population[i], "fitness": fitness_values[i]}
         for i in pareto_indices
     ]
 
-    return pareto_front, hv_history
+    return pareto_front, hv_history, gen_fronts

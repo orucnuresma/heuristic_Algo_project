@@ -1,2 +1,22 @@
 __pycache__/
 *.pyc
+
+# Run sonuclari
+results/
+docker/
+docker-compose.yml
+diet_mysql_data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+*.env

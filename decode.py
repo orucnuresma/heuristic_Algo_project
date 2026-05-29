@@ -70,7 +70,7 @@ def _build_cache(foods_df, nutrients_df, dri_df, user_info, user_foods_df=None):
                 limits[nutrient_id] = {"RLL": 0.0, "RUL": 1e9}
         GLOBAL_USER_LIMITS[user_key] = limits
 
-    # 2. Besin İçerikleri Cache (Kızların getireceği 'quantity' sütun ismi korumalı)
+    # 2. Besin İçerikleri Cache
     if not GLOBAL_FOOD_MAP:
         val_col = _get_col(nutrients_df, ["quantity", "value", "Value"])
         for _, r in nutrients_df.iterrows():
@@ -87,14 +87,20 @@ def _build_cache(foods_df, nutrients_df, dri_df, user_info, user_foods_df=None):
         group_col = _get_col(foods_df, ["foodGroupId", "food_group"])
         GLOBAL_GROUP_MAP = dict(zip(foods_df["id"], foods_df[group_col]))
 
-    # 4. Kişiye Özel Tercih Haritası (user_foods tablosu öncelikli kurgu)
+    # 4. Kişiye Özel Tercih Haritası
+    # Öncelik 1: user_info["preferences"] (main.py'den gelen kullanıcı tercihleri)
     GLOBAL_PREF_MAP = {}
-    if user_foods_df is not None and not user_foods_df.empty:
+    user_prefs = user_info.get("preferences", {})
+    if user_prefs:
+        GLOBAL_PREF_MAP["active"] = user_prefs
+    elif user_foods_df is not None and not user_foods_df.empty:
+        # Öncelik 2: user_foods tablosu
         user_specific = user_foods_df[user_foods_df["userId"] == user_id]
         if not user_specific.empty:
             GLOBAL_PREF_MAP["active"] = dict(zip(user_specific["foodId"], user_specific["preference"]))
-            
+
     if "active" not in GLOBAL_PREF_MAP:
+        # Öncelik 3: foods tablosundaki preference/preference2 sütunu
         preference_col = get_preference_col(user_info)
         for col_name in [preference_col, preference_col.lower(), preference_col.capitalize()]:
             if col_name in foods_df.columns:
@@ -124,9 +130,9 @@ def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info, use
     breakfast_part, lunch_part = individual
     selected_breakfast = []
     current_breakfast_totals = {nid: 0.0 for nid in NUTRIENT_IDS}
-    
+
     # KURAL 1: Kahvaltı için tek grup kilitlenmesi takibi
-    breakfast_group_id = None  
+    breakfast_group_id = None
 
     # --- KAHVALTI DECODING ---
     for food_id in breakfast_part:
@@ -140,7 +146,7 @@ def decode_chromosome(individual, foods_df, nutrients_df, dri_df, user_info, use
             continue
 
         nutrients = GLOBAL_FOOD_MAP.get(food_id, {nid: 0.0 for nid in NUTRIENT_IDS})
-        
+
         # Üst Sınır Kontrolü (%35 RUL * 1.15)
         exceed = False
         for nutrient_id in BREAKFAST_IDS:
@@ -204,14 +210,14 @@ def calculate_penalty(selected_foods, foods_df, nutrients_df, dri_df, user_info,
     # KURAL 3: Sıralamadan bağımsız olarak Lunch+Dinner yiyeceklerini ayırıp grup sayma
     breakfast_group_id = GLOBAL_GROUP_MAP.get(selected_foods[0]) if selected_foods else None
     lunch_dinner_foods = [fid for fid in selected_foods if GLOBAL_GROUP_MAP.get(fid) != breakfast_group_id]
-    
+
     lunch_dinner_groups = set()
     for food_id in lunch_dinner_foods:
         g_id = GLOBAL_GROUP_MAP.get(food_id)
         if g_id is not None:
             lunch_dinner_groups.add(g_id)
 
-    # ÖNEMLİ DÜZELTME: Algoritma kilitlenmesin (Front: 0 çıkmasın) diye KADEMELİ ceza kurgusu!
+    # ÖNEMLİ DÜZELTME: Algoritma kilitlenmesin diye KADEMELİ ceza kurgusu!
     if len(lunch_dinner_groups) < 4:
         return 500000.0 * (4 - len(lunch_dinner_groups))
 
@@ -220,7 +226,7 @@ def calculate_penalty(selected_foods, foods_df, nutrients_df, dri_df, user_info,
         food_group = GLOBAL_GROUP_MAP.get(food_id)
         pref_value = GLOBAL_PREF_MAP.get("active", {}).get(food_id, 0)
         if pref_value == -1 or (user_info.get("is_vegetarian", False) and food_group in MEAT_GROUP_IDS):
-            return HUGE_PENALTY  
+            return HUGE_PENALTY
 
     user_key = f"{user_info.get('age')}_{user_info.get('gender')}"
     limits = GLOBAL_USER_LIMITS[user_key]

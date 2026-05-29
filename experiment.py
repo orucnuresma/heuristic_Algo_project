@@ -150,6 +150,11 @@ def compute_reference_point(all_fitness_values):
     """
     PDF kurali: tum run'lardaki en kotu deger + %10 margin.
     Tum algoritmalar ayni referans noktasini kullanir.
+
+    NOT: Negatif degerler icin worst * 1.10 yanlis sonuc verir
+    (daha kucuk = daha iyi yapar). Bu yuzden mutlak deger bazli
+    margin kullanilir: ref = worst + |worst| * 0.10
+    Bu her zaman "daha kotu" (daha buyuk) bir referans noktasi uretir.
     """
     if not all_fitness_values:
         return None
@@ -158,7 +163,9 @@ def compute_reference_point(all_fitness_values):
     ref = []
     for i in range(n_obj):
         worst = max(f[i] for f in all_fitness_values)
-        ref.append(worst * 1.10)  # %10 margin
+        # Pozitif veya negatif farketmez, her zaman worst'ten buyuk ref uret
+        margin = max(abs(worst) * 0.10, 0.01)
+        ref.append(worst + margin)
 
     return ref
 
@@ -263,25 +270,92 @@ def save_pareto_to_json(pareto_front, filename, experiment_name):
 
     print(f"JSON kaydedildi: {filepath}")
 
-def save_sample_menu_to_json(pareto_front, filename, experiment_name):
+def save_sample_menu_to_json(pareto_front, filename, experiment_name,
+                             foods_df=None, nutrients_df=None, dri_df=None, user_info=None):
+    """
+    PDF gereksinimi (s.7): "at least 3 Pareto solutions: food items,
+    nutrient totals vs. DRI bounds, objective values"
+    """
+    from decode import decode_chromosome, NUTRIENT_IDS, _build_cache, GLOBAL_FOOD_MAP, _filter_dri_for_user
 
     os.makedirs("results/sample_menus", exist_ok=True)
-
     filepath = os.path.join("results/sample_menus", filename)
 
+    # En fazla 3 ornek cozum (PDF: "at least 3")
+    sample_count = min(3, len(pareto_front))
+    # Farkli bolgelerdeki cozumleri sec (bastan, ortadan, sondan)
+    if len(pareto_front) >= 3:
+        indices = [0, len(pareto_front) // 2, len(pareto_front) - 1]
+    else:
+        indices = list(range(sample_count))
+
     data = []
-
-    for idx, sol in enumerate(pareto_front):
-
+    for idx in indices:
+        sol = pareto_front[idx]
         breakfast_part, lunch_part = sol["individual"]
 
         entry = {
             "experiment": experiment_name,
             "solution_id": idx,
-            "fitness": list(sol["fitness"]),
+            "fitness": {
+                "obj_preference": sol["fitness"][0],
+                "obj_cost": sol["fitness"][1],
+                "obj_co2": sol["fitness"][2]
+            },
             "breakfast_ids": breakfast_part,
             "lunch_ids": lunch_part
         }
+
+        # Detayli menu bilgisi (foods_df verilmisse)
+        if foods_df is not None and nutrients_df is not None and dri_df is not None and user_info is not None:
+            selected_foods = decode_chromosome(
+                sol["individual"], foods_df, nutrients_df, dri_df, user_info
+            )
+
+            # Food names
+            food_names = []
+            for fid in selected_foods:
+                row = foods_df[foods_df["id"] == fid]
+                if not row.empty:
+                    food_names.append({"id": int(fid), "name": str(row.iloc[0]["name"])})
+            entry["selected_foods"] = food_names
+
+            # Nutrient totals
+            _build_cache(foods_df, nutrients_df, dri_df, user_info)
+            nutrient_totals = {nid: 0.0 for nid in NUTRIENT_IDS}
+            for fid in selected_foods:
+                fn = GLOBAL_FOOD_MAP.get(fid, {nid: 0.0 for nid in NUTRIENT_IDS})
+                for nid in NUTRIENT_IDS:
+                    nutrient_totals[nid] += fn[nid]
+
+            # DRI bounds
+            user_dri = _filter_dri_for_user(dri_df, user_info)
+            nutrient_names = {5: "Energy", 15: "Protein", 8: "Carbohydrate", 4: "Fiber", 17: "Sodium"}
+            nutrients_vs_dri = []
+            for nid in NUTRIENT_IDS:
+                dri_row = user_dri[user_dri["nutrient_id"] == nid]
+                rll = float(dri_row.iloc[0]["RLL"]) if not dri_row.empty else 0.0
+                rul = float(dri_row.iloc[0]["RUL"]) if not dri_row.empty else 9999.0
+                total = nutrient_totals[nid]
+                within = rll <= total <= rul
+                nutrients_vs_dri.append({
+                    "nutrient": nutrient_names.get(nid, str(nid)),
+                    "total": round(total, 2),
+                    "RLL": round(rll, 2),
+                    "RUL": round(rul, 2),
+                    "within_bounds": within
+                })
+            entry["nutrients_vs_dri"] = nutrients_vs_dri
+            entry["constraints_met"] = sum(1 for n in nutrients_vs_dri if n["within_bounds"])
+            entry["total_constraints"] = len(NUTRIENT_IDS)
+
+            # Distinct food groups
+            group_ids = set()
+            for fid in selected_foods:
+                row = foods_df[foods_df["id"] == fid]
+                if not row.empty:
+                    group_ids.add(int(row.iloc[0]["foodGroupId"]))
+            entry["distinct_food_groups"] = len(group_ids)
 
         data.append(entry)
 
@@ -300,52 +374,30 @@ def save_sample_menu_to_json(pareto_front, filename, experiment_name):
 # --- Ortak parametreler ---
 POP_SIZE = 100
 ARCHIVE_SIZE = 100
-NUM_GENERATIONS = 200
+NUM_GENERATIONS = 80    # Early stopping ile genelde 40-60'ta durur
 CROSSOVER_RATE = 0.9
-NUM_RUNS = 5
+NUM_RUNS = 3
 
 
 def _run_single_comparison(breakfast_ids, lunch_ids,
                            foods_df, nutrients_df, dri_df, user_info,
-                           label="",diversity_enabled=False):
+                           label="", diversity_enabled=False, user_foods_df=None):
     """
     NSGA-II ve SPEA2'yi ayni kosullarda calistirip sonuclari dondurur.
-    Once ref_point'suz bir on-run yapar, sonra gercek run'lari ref_point ile yapar.
+    On-run KALDIRILDI — ref_point gercek run sonuclarindan post-hoc hesaplanir.
+    HV convergence da post-hoc hesaplanir (gen_fronts'tan).
     """
     print(f"\n{'='*60}")
     print(f"  {label}")
-    print(f"  Pop: {POP_SIZE} | Gen: {NUM_GENERATIONS} | Runs: {NUM_RUNS}")
+    print(f"  Pop: {POP_SIZE} | Gen: {NUM_GENERATIONS} (+ early stop) | Runs: {NUM_RUNS}")
     print(f"{'='*60}")
 
-    # --- On-run: referans noktasi icin en kotu degerleri topla ---
-    print("\n[On-run] Referans noktasi hesaplaniyor...")
-    all_fitness = []
-    for run in range(NUM_RUNS):
-        seed = 42 + run
-        random.seed(seed)
-        nsga2_pf, _ = run_nsga2(
-            breakfast_ids, lunch_ids, POP_SIZE, NUM_GENERATIONS,
-            foods_df, nutrients_df, dri_df, user_info, CROSSOVER_RATE,diversity_enabled=diversity_enabled
-        )
-        for sol in nsga2_pf:
-            all_fitness.append(sol["fitness"])
-
-        random.seed(seed)
-        spea2_pf, _ = run_spea2(
-            breakfast_ids, lunch_ids, POP_SIZE, ARCHIVE_SIZE, NUM_GENERATIONS,
-            foods_df, nutrients_df, dri_df, user_info, CROSSOVER_RATE,diversity_enabled=diversity_enabled
-        )
-        for sol in spea2_pf:
-            all_fitness.append(sol["fitness"])
-
-    ref_point = compute_reference_point(all_fitness)
-    print(f"  Referans noktasi: {ref_point}")
-
-    # --- Gercek run'lar (convergence tracking ile) ---
+    # --- Tek seferde gercek run'lar (on-run YOK) ---
     nsga2_results = []
     spea2_results = []
-    nsga2_hv_histories = []
-    spea2_hv_histories = []
+    nsga2_gen_fronts_all = []
+    spea2_gen_fronts_all = []
+    all_fitness = []
 
     for run in range(NUM_RUNS):
         print(f"\n--- Run {run + 1}/{NUM_RUNS} ---")
@@ -353,23 +405,47 @@ def _run_single_comparison(breakfast_ids, lunch_ids,
 
         random.seed(seed)
         print("  NSGA-II calisiyor...")
-        nsga2_pf, nsga2_hv = run_nsga2(
+        nsga2_pf, _, nsga2_gf = run_nsga2(
             breakfast_ids, lunch_ids, POP_SIZE, NUM_GENERATIONS,
             foods_df, nutrients_df, dri_df, user_info, CROSSOVER_RATE,
-            ref_point=ref_point,diversity_enabled=diversity_enabled
+            diversity_enabled=diversity_enabled, user_foods_df=user_foods_df
         )
         nsga2_results.append(nsga2_pf)
-        nsga2_hv_histories.append(nsga2_hv)
+        nsga2_gen_fronts_all.append(nsga2_gf)
+        for sol in nsga2_pf:
+            all_fitness.append(sol["fitness"])
 
         random.seed(seed)
         print("  SPEA2 calisiyor...")
-        spea2_pf, spea2_hv = run_spea2(
+        spea2_pf, _, spea2_gf = run_spea2(
             breakfast_ids, lunch_ids, POP_SIZE, ARCHIVE_SIZE, NUM_GENERATIONS,
             foods_df, nutrients_df, dri_df, user_info, CROSSOVER_RATE,
-            ref_point=ref_point,diversity_enabled=diversity_enabled
+            diversity_enabled=diversity_enabled, user_foods_df=user_foods_df
         )
         spea2_results.append(spea2_pf)
-        spea2_hv_histories.append(spea2_hv)
+        spea2_gen_fronts_all.append(spea2_gf)
+        for sol in spea2_pf:
+            all_fitness.append(sol["fitness"])
+
+    # --- Post-hoc: ref_point hesapla ---
+    ref_point = compute_reference_point(all_fitness)
+    print(f"\n  Referans noktasi (post-hoc): {ref_point}")
+
+    # --- Post-hoc: HV history hesapla (gen_fronts'tan) ---
+    nsga2_hv_histories = []
+    spea2_hv_histories = []
+
+    for gen_fronts in nsga2_gen_fronts_all:
+        hv_hist = []
+        for front_fit in gen_fronts:
+            hv_hist.append(hypervolume(front_fit, ref_point) if front_fit else 0.0)
+        nsga2_hv_histories.append(hv_hist)
+
+    for gen_fronts in spea2_gen_fronts_all:
+        hv_hist = []
+        for front_fit in gen_fronts:
+            hv_hist.append(hypervolume(front_fit, ref_point) if front_fit else 0.0)
+        spea2_hv_histories.append(hv_hist)
 
     # --- Sonuclari raporla ---
     print(f"\n{'='*60}")
@@ -402,7 +478,7 @@ def _run_single_comparison(breakfast_ids, lunch_ids,
 
 def experiment_user_comparison(breakfast_ids, lunch_ids,
                                foods_df, nutrients_df, dri_df,
-                               user1_info, user2_info):
+                               user1_info, user2_info, user_foods_df=None):
     """
     PDF Deney 1: User 1 (non-vegetarian) ve User 2 (vegetarian) icin
     algoritmalari ayri ayri calistirip Pareto front'lari karsilastirir.
@@ -414,13 +490,13 @@ def experiment_user_comparison(breakfast_ids, lunch_ids,
     result_u1 = _run_single_comparison(
         breakfast_ids, lunch_ids,
         foods_df, nutrients_df, dri_df, user1_info,
-        label="User 1 (Non-vegetarian)"
+        label="User 1 (Non-vegetarian)", user_foods_df=user_foods_df
     )
 
     result_u2 = _run_single_comparison(
         breakfast_ids, lunch_ids,
         foods_df, nutrients_df, dri_df, user2_info,
-        label="User 2 (Vegetarian)"
+        label="User 2 (Vegetarian)", user_foods_df=user_foods_df
     )
 
     # CSV + JSON kaydet
@@ -438,61 +514,65 @@ def experiment_user_comparison(breakfast_ids, lunch_ids,
         "user1_nsga2"
     )
         save_sample_menu_to_json(
-        result_u1["nsga2_results"][run],
-        f"user1_nsga2_menu_run{run+1}.json",
-        "user1_nsga2"
-   )
+            result_u1["nsga2_results"][run],
+            f"user1_nsga2_menu_run{run+1}.json",
+            "user1_nsga2",
+            foods_df, nutrients_df, dri_df, user1_info
+        )
 
         save_pareto_to_csv(
-        result_u1["spea2_results"][run],
-        f"user1_spea2_run{run+1}.csv",
-        "user1_spea2"
-    )
+            result_u1["spea2_results"][run],
+            f"user1_spea2_run{run+1}.csv",
+            "user1_spea2"
+        )
 
         save_pareto_to_json(
-        result_u1["spea2_results"][run],
-        f"user1_spea2_run{run+1}.json",
-        "user1_spea2"
-    )
+            result_u1["spea2_results"][run],
+            f"user1_spea2_run{run+1}.json",
+            "user1_spea2"
+        )
         save_sample_menu_to_json(
-        result_u1["spea2_results"][run],
-        f"user1_spea2_menu_run{run+1}.json",
-        "user1_spea2"
-    )
+            result_u1["spea2_results"][run],
+            f"user1_spea2_menu_run{run+1}.json",
+            "user1_spea2",
+            foods_df, nutrients_df, dri_df, user1_info
+        )
 
         save_pareto_to_csv(
-        result_u2["nsga2_results"][run],
-        f"user2_nsga2_run{run+1}.csv",
-        "user2_nsga2"
-    )
+            result_u2["nsga2_results"][run],
+            f"user2_nsga2_run{run+1}.csv",
+            "user2_nsga2"
+        )
 
         save_pareto_to_json(
-        result_u2["nsga2_results"][run],
-        f"user2_nsga2_run{run+1}.json",
-        "user2_nsga2"
-    )
+            result_u2["nsga2_results"][run],
+            f"user2_nsga2_run{run+1}.json",
+            "user2_nsga2"
+        )
         save_sample_menu_to_json(
-        result_u2["nsga2_results"][run],
-        f"user2_nsga2_menu_run{run+1}.json",
-        "user2_nsga2"
-    )
+            result_u2["nsga2_results"][run],
+            f"user2_nsga2_menu_run{run+1}.json",
+            "user2_nsga2",
+            foods_df, nutrients_df, dri_df, user2_info
+        )
 
         save_pareto_to_csv(
-        result_u2["spea2_results"][run],
-        f"user2_spea2_run{run+1}.csv",
-        "user2_spea2"
-    )
+            result_u2["spea2_results"][run],
+            f"user2_spea2_run{run+1}.csv",
+            "user2_spea2"
+        )
 
         save_pareto_to_json(
-        result_u2["spea2_results"][run],
-        f"user2_spea2_run{run+1}.json",
-        "user2_spea2"
-    )
+            result_u2["spea2_results"][run],
+            f"user2_spea2_run{run+1}.json",
+            "user2_spea2"
+        )
         save_sample_menu_to_json(
-        result_u2["spea2_results"][run],
-        f"user2_spea2_menu_run{run+1}.json",
-        "user2_spea2"
-   )
+            result_u2["spea2_results"][run],
+            f"user2_spea2_menu_run{run+1}.json",
+            "user2_spea2",
+            foods_df, nutrients_df, dri_df, user2_info
+        )
 
     return result_u1, result_u2
 
@@ -500,7 +580,7 @@ def experiment_user_comparison(breakfast_ids, lunch_ids,
 # --- DENEY 2: Algoritma karsilastirmasi ---
 
 def experiment_algorithm_comparison(breakfast_ids, lunch_ids,
-                                    foods_df, nutrients_df, dri_df, user_info):
+                                    foods_df, nutrients_df, dri_df, user_info, user_foods_df=None):
     """
     PDF Deney 2: NSGA-II ve SPEA2 ayni parametrelerle karsilastirilir.
     Convergence curve verileri CSV'ye kaydedilir.
@@ -512,7 +592,7 @@ def experiment_algorithm_comparison(breakfast_ids, lunch_ids,
     result = _run_single_comparison(
         breakfast_ids, lunch_ids,
         foods_df, nutrients_df, dri_df, user_info,
-        label="Algoritma Karsilastirmasi"
+        label="Algoritma Karsilastirmasi", user_foods_df=user_foods_df
     )
 
     # Convergence CSV kaydet
@@ -522,7 +602,7 @@ def experiment_algorithm_comparison(breakfast_ids, lunch_ids,
         save_convergence_to_csv(result["spea2_hv_histories"][run],
                                 f"convergence_spea2_run{run+1}.csv", "SPEA2")
 
-   
+
     # Pareto front CSV
     for run in range(NUM_RUNS):
 
@@ -537,18 +617,30 @@ def experiment_algorithm_comparison(breakfast_ids, lunch_ids,
             f"algo_nsga2_menu_run{run+1}.csv",
             "algo_nsga2"
         )
+        save_sample_menu_to_json(
+            result["nsga2_results"][run],
+            f"algo_nsga2_menu_run{run+1}.json",
+            "algo_nsga2",
+            foods_df, nutrients_df, dri_df, user_info
+        )
 
         save_pareto_to_csv(
             result["spea2_results"][run],
             f"algo_spea2_run{run+1}.csv",
             "spea2"
-       )
+        )
 
         save_sample_menu_to_csv(
             result["spea2_results"][run],
             f"algo_spea2_menu_run{run+1}.csv",
             "algo_spea2"
-       )
+        )
+        save_sample_menu_to_json(
+            result["spea2_results"][run],
+            f"algo_spea2_menu_run{run+1}.json",
+            "algo_spea2",
+            foods_df, nutrients_df, dri_df, user_info
+        )
 
     return result
 
@@ -556,36 +648,30 @@ def experiment_algorithm_comparison(breakfast_ids, lunch_ids,
 # --- DENEY 3: Diversity etkisi ---
 
 def experiment_diversity_impact(breakfast_ids, lunch_ids,
-                                foods_df, nutrients_df, dri_df, user_info):
+                                foods_df, nutrients_df, dri_df, user_info, user_foods_df=None):
     """
     PDF Deney 3: Diversity mekanizmasi acik/kapali karsilastirmasi.
-    Not: Diversity mekanizmasinin kendisi Gorev 3'te implement edilir.
     Bu fonksiyon evaluate fonksiyonundaki diversity flag'e gore calisir.
     """
     print("\n" + "#" * 60)
     print("# DENEY 3: DIVERSITY ETKISI")
     print("#" * 60)
 
-    # Diversity mekanizmasi aktif.
-    # Diversity ON/OFF senaryolari karsilastirilmaktadir.
-
     print("\n--- Diversity KAPALI ---")
     result_off = _run_single_comparison(
         breakfast_ids, lunch_ids,
         foods_df, nutrients_df, dri_df, user_info,
-        label="Diversity KAPALI",
-        diversity_enabled=False
+        label="Diversity KAPALI", diversity_enabled=False, user_foods_df=user_foods_df
     )
 
     print("\n--- Diversity ACIK ---")
     result_on = _run_single_comparison(
         breakfast_ids, lunch_ids,
         foods_df, nutrients_df, dri_df, user_info,
-        label="Diversity ACIK",
-        diversity_enabled=True
+        label="Diversity ACIK", diversity_enabled=True, user_foods_df=user_foods_df
     )
 
-   
+
     # CSV kaydet
     for run in range(NUM_RUNS):
 
@@ -600,17 +686,29 @@ def experiment_diversity_impact(breakfast_ids, lunch_ids,
             f"div_off_nsga2_menu_run{run+1}.csv",
             "diversity_off_nsga2"
         )
+        save_sample_menu_to_json(
+            result_off["nsga2_results"][run],
+            f"div_off_nsga2_menu_run{run+1}.json",
+            "diversity_off_nsga2",
+            foods_df, nutrients_df, dri_df, user_info
+        )
 
         save_pareto_to_csv(
             result_on["nsga2_results"][run],
             f"div_on_nsga2_run{run+1}.csv",
             "diversity_on_nsga2"
-       )
+        )
 
         save_sample_menu_to_csv(
             result_on["nsga2_results"][run],
             f"div_on_nsga2_menu_run{run+1}.csv",
             "diversity_on_nsga2"
+        )
+        save_sample_menu_to_json(
+            result_on["nsga2_results"][run],
+            f"div_on_nsga2_menu_run{run+1}.json",
+            "diversity_on_nsga2",
+            foods_df, nutrients_df, dri_df, user_info
         )
 
     return result_off, result_on
@@ -620,7 +718,7 @@ def experiment_diversity_impact(breakfast_ids, lunch_ids,
 
 def run_all_experiments(breakfast_ids, lunch_ids,
                         foods_df, nutrients_df, dri_df,
-                        user1_info, user2_info):
+                        user1_info, user2_info, user_foods_df=None):
     """Tum deneyleri sirayla calistirir."""
     print("\n" + "=" * 60)
     print("  TUM DENEYLER BASLIYOR")
@@ -630,19 +728,19 @@ def run_all_experiments(breakfast_ids, lunch_ids,
     r1_u1, r1_u2 = experiment_user_comparison(
         breakfast_ids, lunch_ids,
         foods_df, nutrients_df, dri_df,
-        user1_info, user2_info
+        user1_info, user2_info, user_foods_df
     )
 
     # Deney 2: Algoritma karsilastirmasi (User 1 ile)
     r2 = experiment_algorithm_comparison(
         breakfast_ids, lunch_ids,
-        foods_df, nutrients_df, dri_df, user1_info
+        foods_df, nutrients_df, dri_df, user1_info, user_foods_df
     )
 
     # Deney 3: Diversity etkisi (User 1 ile)
     r3_off, r3_on = experiment_diversity_impact(
         breakfast_ids, lunch_ids,
-        foods_df, nutrients_df, dri_df, user1_info
+        foods_df, nutrients_df, dri_df, user1_info, user_foods_df
     )
     print("\nGrafikler olusturuluyor...")
 
