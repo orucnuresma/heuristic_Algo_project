@@ -5,6 +5,13 @@ import os
 import json
 from nsga2 import run_nsga2
 from spea2 import run_spea2
+from visualization import (
+    plot_algorithm_comparison,
+    plot_convergence,
+    plot_pareto_front,
+    plot_3d_pareto,
+    plot_user_comparison
+)
 
 
 # ============================================================
@@ -181,6 +188,7 @@ def save_pareto_to_csv(pareto_front, filename, experiment_name):
     print(f"  Kaydedildi: {filepath}")
 
 def save_sample_menu_to_csv(pareto_front, filename, experiment_name):
+    print("SAMPLE MENU FONKSIYONU CALISTI")
 
     os.makedirs("results/sample_menus", exist_ok=True)
 
@@ -208,8 +216,8 @@ def save_sample_menu_to_csv(pareto_front, filename, experiment_name):
                 experiment_name,
                 idx,
                 *sol["fitness"],
-                str(breakfast_part[:15]),
-                str(lunch_part[:15])
+                str(breakfast_part),
+                str(lunch_part)
             ])
 
     print(f"Sample menu kaydedildi: {filepath}")
@@ -271,8 +279,8 @@ def save_sample_menu_to_json(pareto_front, filename, experiment_name):
             "experiment": experiment_name,
             "solution_id": idx,
             "fitness": list(sol["fitness"]),
-            "breakfast_ids": breakfast_part[:10],
-            "lunch_ids": lunch_part[:10]
+            "breakfast_ids": breakfast_part,
+            "lunch_ids": lunch_part
         }
 
         data.append(entry)
@@ -635,6 +643,37 @@ def run_all_experiments(breakfast_ids, lunch_ids,
     r3_off, r3_on = experiment_diversity_impact(
         breakfast_ids, lunch_ids,
         foods_df, nutrients_df, dri_df, user1_info
+    )
+    print("\nGrafikler olusturuluyor...")
+
+        # Algorithm comparison
+    plot_algorithm_comparison(
+    r2["nsga2_hv_histories"][0],
+    r2["spea2_hv_histories"][0]
+    )
+
+    # Convergence
+    plot_convergence(
+        r2["nsga2_hv_histories"][0],
+        "NSGA-II"
+    )
+
+    # Pareto front
+    plot_pareto_front(
+        r2["nsga2_results"][0],
+        "NSGA-II"
+    )
+
+    # 3D Pareto
+    plot_3d_pareto(
+        r2["nsga2_results"][0],
+        "NSGA-II"
+    )
+
+    # User comparison
+    plot_user_comparison(
+        r1_u1["nsga2_results"][0],
+        r1_u2["nsga2_results"][0]
     )
 
     print("\n" + "=" * 60)
