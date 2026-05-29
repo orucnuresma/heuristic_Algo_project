@@ -1,0 +1,902 @@
+[
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 0,
+        "fitness": [
+            -101.59020738240385,
+            38.37979261759616,
+            79.80979261759617
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 1,
+        "fitness": [
+            -63.608089824999986,
+            30.291910174999998,
+            27.991910174999997
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 2,
+        "fitness": [
+            -102.27348356274202,
+            42.33651643725796,
+            96.32651643725798
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 3,
+        "fitness": [
+            -62.999924654136684,
+            15.870075345863313,
+            23.700075345863315
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 4,
+        "fitness": [
+            -51.221469799999994,
+            11.188530199999999,
+            29.0785302
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 5,
+        "fitness": [
+            -50.300000000000004,
+            26.64,
+            21.7
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 6,
+        "fitness": [
+            -69.39999999999999,
+            21.96,
+            30.8
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 7,
+        "fitness": [
+            -62.999924654136684,
+            15.870075345863313,
+            23.700075345863315
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 8,
+        "fitness": [
+            -20.972598058333336,
+            5.937401941666667,
+            21.527401941666664
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 9,
+        "fitness": [
+            -35.46088925,
+            11.699110750000001,
+            17.339110750000003
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 10,
+        "fitness": [
+            -52.199935074316066,
+            13.740064925683939,
+            34.800064925683934
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 11,
+        "fitness": [
+            -62.195132427317354,
+            13.034867572682638,
+            50.90486757268264
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 12,
+        "fitness": [
+            -51.400000000000006,
+            16.96,
+            22.6
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 13,
+        "fitness": [
+            -28.397871249999998,
+            9.262128749999999,
+            12.102128749999999
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 14,
+        "fitness": [
+            -101.12643293476401,
+            36.56356706523597,
+            81.87356706523599
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 15,
+        "fitness": [
+            -56.0,
+            14.58,
+            25.500000000000004
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 16,
+        "fitness": [
+            -39.590865,
+            19.129135,
+            15.809135000000001
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 17,
+        "fitness": [
+            -98.98492617527319,
+            36.4050738247268,
+            83.81507382472681
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 18,
+        "fitness": [
+            -49.89999679567091,
+            10.250003204329092,
+            34.50000320432908
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 19,
+        "fitness": [
+            -62.300000000000004,
+            15.860000000000001,
+            44.7
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 20,
+        "fitness": [
+            -70.03030207592444,
+            16.08969792407556,
+            61.76969792407556
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 21,
+        "fitness": [
+            -97.09219278269231,
+            38.077807217307694,
+            77.10780721730771
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 22,
+        "fitness": [
+            -66.65428903076923,
+            16.835710969230767,
+            56.44571096923077
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 23,
+        "fitness": [
+            -66.84362926923076,
+            17.82637073076923,
+            53.65637073076923
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 24,
+        "fitness": [
+            -74.7,
+            18.44,
+            36.300000000000004
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 25,
+        "fitness": [
+            -17.259362869871794,
+            6.330637130128205,
+            12.240637130128206
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 26,
+        "fitness": [
+            -81.6,
+            26.640000000000004,
+            64.70000000000002
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 27,
+        "fitness": [
+            -67.06456124806607,
+            17.905438751933936,
+            46.835438751933935
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 28,
+        "fitness": [
+            -13.5,
+            6.76,
+            11.2
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 29,
+        "fitness": [
+            -31.394707250000003,
+            10.21529275,
+            16.10529275
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 30,
+        "fitness": [
+            -23.811081375,
+            19.588918624999998,
+            7.088918625
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 31,
+        "fitness": [
+            -57.8,
+            12.020000000000003,
+            49.599999999999994
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 32,
+        "fitness": [
+            -87.96479198125,
+            33.12520801875001,
+            73.73520801875
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 33,
+        "fitness": [
+            -82.92616134875001,
+            22.093838651250003,
+            72.17383865125001
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 34,
+        "fitness": [
+            -37.6,
+            20.690000000000005,
+            14.9
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 35,
+        "fitness": [
+            -42.60000000000001,
+            19.37,
+            17.5
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 36,
+        "fitness": [
+            -43.69995103864415,
+            8.320048961355848,
+            19.80004896135585
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 37,
+        "fitness": [
+            -47.099999999999994,
+            14.54,
+            23.0
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 38,
+        "fitness": [
+            -92.32389945,
+            33.96610055,
+            68.57610055000002
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 39,
+        "fitness": [
+            -89.99363712898024,
+            33.18636287101976,
+            75.70636287101978
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 40,
+        "fitness": [
+            -25.820736841666665,
+            6.159263158333333,
+            26.379263158333334
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 41,
+        "fitness": [
+            -87.53305649249737,
+            25.256943507502626,
+            75.76694350750265
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 42,
+        "fitness": [
+            -20.972598058333336,
+            5.937401941666667,
+            21.527401941666664
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 43,
+        "fitness": [
+            -53.800000000000004,
+            9.84,
+            41.099999999999994
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 44,
+        "fitness": [
+            -94.22278275961538,
+            32.46721724038461,
+            76.37721724038464
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 45,
+        "fitness": [
+            -80.07360139911565,
+            20.546398600884356,
+            60.82639860088437
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 46,
+        "fitness": [
+            -87.555614575,
+            29.624385425,
+            68.244385425
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 47,
+        "fitness": [
+            -35.986069044999994,
+            17.273930955,
+            14.213930954999999
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 48,
+        "fitness": [
+            -78.439994255,
+            20.500005745000003,
+            54.560005745000005
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 49,
+        "fitness": [
+            -50.300000000000004,
+            26.64,
+            21.7
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 50,
+        "fitness": [
+            -56.2,
+            9.780000000000001,
+            42.89999999999999
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 51,
+        "fitness": [
+            -79.2,
+            24.52,
+            60.800000000000004
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 52,
+        "fitness": [
+            -39.1019496,
+            11.398050399999999,
+            19.5980504
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 53,
+        "fitness": [
+            -69.09996822607475,
+            15.820031773925244,
+            68.70003177392525
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 54,
+        "fitness": [
+            -89.92201969749738,
+            25.71798030250263,
+            78.17798030250263
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 55,
+        "fitness": [
+            -97.67502363476402,
+            35.85497636523598,
+            80.92497636523598
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 56,
+        "fitness": [
+            -31.870047525,
+            7.539952475,
+            27.329952474999995
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 57,
+        "fitness": [
+            -62.69996121134382,
+            15.770038788656178,
+            64.20003878865619
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 58,
+        "fitness": [
+            -18.85207171153846,
+            5.327928288461538,
+            15.747928288461539
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 59,
+        "fitness": [
+            -86.855514825,
+            33.064485175,
+            68.144485175
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 60,
+        "fitness": [
+            -14.651545800000001,
+            14.8584542,
+            3.0484542
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 61,
+        "fitness": [
+            -80.62651134375,
+            18.203488656250002,
+            71.77348865625001
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 62,
+        "fitness": [
+            -82.4,
+            26.310000000000006,
+            69.8
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 63,
+        "fitness": [
+            -86.7,
+            26.830000000000002,
+            63.800000000000004
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 64,
+        "fitness": [
+            -27.36948875,
+            10.420511249999999,
+            8.33051125
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 65,
+        "fitness": [
+            -89.9,
+            27.940000000000005,
+            74.0
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 66,
+        "fitness": [
+            -57.1944489125,
+            10.355551087500002,
+            46.70555108749999
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 67,
+        "fitness": [
+            -58.59990950211444,
+            14.52009049788556,
+            43.20009049788556
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 68,
+        "fitness": [
+            -79.56378852996794,
+            19.83621147003207,
+            69.43621147003208
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 69,
+        "fitness": [
+            -63.608089824999986,
+            30.291910174999998,
+            27.991910174999997
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 70,
+        "fitness": [
+            -82.045731825,
+            20.744268175000002,
+            77.55426817500002
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 71,
+        "fitness": [
+            -91.16619557115385,
+            31.79380442884616,
+            78.33380442884618
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 72,
+        "fitness": [
+            -102.27348356274202,
+            42.33651643725796,
+            96.32651643725798
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 73,
+        "fitness": [
+            -46.363136000000004,
+            9.966864,
+            37.836864000000006
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 74,
+        "fitness": [
+            -31.0,
+            19.730000000000004,
+            10.2
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 75,
+        "fitness": [
+            -76.5,
+            20.96,
+            39.6
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 76,
+        "fitness": [
+            -81.46619819375002,
+            19.843801806250003,
+            65.53380180625001
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 77,
+        "fitness": [
+            -16.746217344230768,
+            11.513782655769232,
+            6.25378265576923
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 78,
+        "fitness": [
+            -89.2447647,
+            33.525235300000006,
+            70.5552353
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 79,
+        "fitness": [
+            -71.2999962849985,
+            17.020003715001504,
+            71.6000037150015
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 80,
+        "fitness": [
+            -63.19997616498947,
+            16.76002383501052,
+            58.700023835010526
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 81,
+        "fitness": [
+            -37.930453175,
+            16.429546825,
+            16.669546825
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 82,
+        "fitness": [
+            -75.6853885925,
+            19.3046114075,
+            57.11461140750001
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 83,
+        "fitness": [
+            -4.9337075,
+            7.8962925,
+            4.1662925
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 84,
+        "fitness": [
+            -63.661171263066066,
+            17.818828736933938,
+            42.63882873693394
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 85,
+        "fitness": [
+            -45.596435037884625,
+            16.753564962115384,
+            19.003564962115387
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 86,
+        "fitness": [
+            -29.230756999999997,
+            7.1792430000000005,
+            17.169243
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 87,
+        "fitness": [
+            -22.7995957625,
+            7.4704042375,
+            11.5004042375
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 88,
+        "fitness": [
+            -36.284229025,
+            7.995770975,
+            31.915770974999994
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 89,
+        "fitness": [
+            -44.300000000000004,
+            10.22,
+            27.5
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 90,
+        "fitness": [
+            -16.41714425,
+            7.142855750000001,
+            5.68285575
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 91,
+        "fitness": [
+            -43.8,
+            14.18,
+            19.9
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 92,
+        "fitness": [
+            -0.5401518332087134,
+            6.679848166791286,
+            7.459848166791287
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 93,
+        "fitness": [
+            -29.630215250000003,
+            12.31978475,
+            11.16978475
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 94,
+        "fitness": [
+            -28.569091075,
+            7.100908925,
+            30.730908924999998
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 95,
+        "fitness": [
+            -36.53020635,
+            8.06979365,
+            20.06979365
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 96,
+        "fitness": [
+            -61.2,
+            12.09,
+            47.99999999999999
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 97,
+        "fitness": [
+            -19.200414,
+            6.959586,
+            7.899586
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 98,
+        "fitness": [
+            -35.2874745,
+            11.1525255,
+            12.2125255
+        ]
+    },
+    {
+        "experiment": "user2_spea2",
+        "solution_id": 99,
+        "fitness": [
+            -25.81000435,
+            7.029995649999999,
+            11.58999565
+        ]
+    }
+]

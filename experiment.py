@@ -180,6 +180,40 @@ def save_pareto_to_csv(pareto_front, filename, experiment_name):
 
     print(f"  Kaydedildi: {filepath}")
 
+def save_sample_menu_to_csv(pareto_front, filename, experiment_name):
+
+    os.makedirs("results/sample_menus", exist_ok=True)
+
+    filepath = os.path.join("results/sample_menus", filename)
+
+    with open(filepath, "w", newline="", encoding="utf-8") as f:
+
+        writer = csv.writer(f)
+
+        writer.writerow([
+            "experiment",
+            "solution_id",
+            "obj_1",
+            "obj_2",
+            "obj_3",
+            "breakfast_ids",
+            "lunch_ids"
+        ])
+
+        for idx, sol in enumerate(pareto_front):
+
+            breakfast_part, lunch_part = sol["individual"]
+
+            writer.writerow([
+                experiment_name,
+                idx,
+                *sol["fitness"],
+                str(breakfast_part[:15]),
+                str(lunch_part[:15])
+            ])
+
+    print(f"Sample menu kaydedildi: {filepath}")
+
 
 def save_convergence_to_csv(hv_history, filename, algorithm_name):
     """Convergence verisini (hypervolume vs generation) CSV'ye kaydeder."""
@@ -480,7 +514,7 @@ def experiment_algorithm_comparison(breakfast_ids, lunch_ids,
         save_convergence_to_csv(result["spea2_hv_histories"][run],
                                 f"convergence_spea2_run{run+1}.csv", "SPEA2")
 
-    # Pareto front CSV
+   
     # Pareto front CSV
     for run in range(NUM_RUNS):
 
@@ -490,9 +524,9 @@ def experiment_algorithm_comparison(breakfast_ids, lunch_ids,
             "nsga2"
        )
 
-        save_sample_menu_to_json(
+        save_sample_menu_to_csv(
             result["nsga2_results"][run],
-            f"algo_nsga2_menu_run{run+1}.json",
+            f"algo_nsga2_menu_run{run+1}.csv",
             "algo_nsga2"
         )
 
@@ -502,9 +536,9 @@ def experiment_algorithm_comparison(breakfast_ids, lunch_ids,
             "spea2"
        )
 
-        save_sample_menu_to_json(
+        save_sample_menu_to_csv(
             result["spea2_results"][run],
-            f"algo_spea2_menu_run{run+1}.json",
+            f"algo_spea2_menu_run{run+1}.csv",
             "algo_spea2"
        )
 
@@ -553,9 +587,9 @@ def experiment_diversity_impact(breakfast_ids, lunch_ids,
             "diversity_off_nsga2"
         )
 
-        save_sample_menu_to_json(
+        save_sample_menu_to_csv(
             result_off["nsga2_results"][run],
-            f"div_off_nsga2_menu_run{run+1}.json",
+            f"div_off_nsga2_menu_run{run+1}.csv",
             "diversity_off_nsga2"
         )
 
@@ -565,9 +599,9 @@ def experiment_diversity_impact(breakfast_ids, lunch_ids,
             "diversity_on_nsga2"
        )
 
-        save_sample_menu_to_json(
+        save_sample_menu_to_csv(
             result_on["nsga2_results"][run],
-            f"div_on_nsga2_menu_run{run+1}.json",
+            f"div_on_nsga2_menu_run{run+1}.csv",
             "diversity_on_nsga2"
         )
 
