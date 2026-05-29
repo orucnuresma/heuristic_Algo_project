@@ -206,34 +206,3 @@ def plot_pareto_from_csv(csv_path, algorithm_name="NSGA-II"):
 
     plt.close()
 
-# ============================================================
-# TEST
-# ============================================================
-
-if __name__ == "__main__":
-
-    # Fake test data
-    fake_pareto = [
-        {"fitness": [-100, 50, 20]},
-        {"fitness": [-90, 40, 18]},
-        {"fitness": [-80, 35, 15]},
-        {"fitness": [-70, 25, 12]},
-    ]
-    fake_user2 = [
-        {"fitness": [-95, 60, 25]},
-        {"fitness": [-85, 52, 20]},
-        {"fitness": [-75, 48, 17]},
-        {"fitness": [-65, 40, 14]},
-  ]
-
-    fake_hv = [10, 15, 20, 24, 28, 30]
-
-    plot_pareto_front(fake_pareto)
-    plot_convergence(fake_hv)
-    plot_algorithm_comparison(fake_hv, [8, 12, 18, 20, 23, 26])
-    plot_3d_pareto(fake_pareto)
-    plot_user_comparison(fake_pareto, fake_user2)
-
-    # CSV test (gercek veri geldikten sonra kullanilacak)
-    # plot_pareto_from_csv("results/algo_nsga2_run1.csv")
-    print("\nTum grafikler olusturuldu.")

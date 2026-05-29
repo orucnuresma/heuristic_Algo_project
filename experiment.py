@@ -221,6 +221,35 @@ def save_pareto_to_json(pareto_front, filename, experiment_name):
 
     print(f"JSON kaydedildi: {filepath}")
 
+def save_sample_menu_to_json(pareto_front, filename, experiment_name):
+
+    os.makedirs("results/sample_menus", exist_ok=True)
+
+    filepath = os.path.join("results/sample_menus", filename)
+
+    data = []
+
+    for idx, sol in enumerate(pareto_front):
+
+        breakfast_part, lunch_part = sol["individual"]
+
+        entry = {
+            "experiment": experiment_name,
+            "solution_id": idx,
+            "fitness": list(sol["fitness"]),
+            "breakfast_ids": breakfast_part[:10],
+            "lunch_ids": lunch_part[:10]
+        }
+
+        data.append(entry)
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+
+    print(f"Sample menu kaydedildi: {filepath}")
+
+
+
 
 # ============================================================
 # 5. EXPERIMENT SENARYOLARI
@@ -236,7 +265,7 @@ NUM_RUNS = 5
 
 def _run_single_comparison(breakfast_ids, lunch_ids,
                            foods_df, nutrients_df, dri_df, user_info,
-                           label=""):
+                           label="",diversity_enabled=False):
     """
     NSGA-II ve SPEA2'yi ayni kosullarda calistirip sonuclari dondurur.
     Once ref_point'suz bir on-run yapar, sonra gercek run'lari ref_point ile yapar.
@@ -254,7 +283,7 @@ def _run_single_comparison(breakfast_ids, lunch_ids,
         random.seed(seed)
         nsga2_pf, _ = run_nsga2(
             breakfast_ids, lunch_ids, POP_SIZE, NUM_GENERATIONS,
-            foods_df, nutrients_df, dri_df, user_info, CROSSOVER_RATE
+            foods_df, nutrients_df, dri_df, user_info, CROSSOVER_RATE,diversity_enabled=diversity_enabled
         )
         for sol in nsga2_pf:
             all_fitness.append(sol["fitness"])
@@ -262,7 +291,7 @@ def _run_single_comparison(breakfast_ids, lunch_ids,
         random.seed(seed)
         spea2_pf, _ = run_spea2(
             breakfast_ids, lunch_ids, POP_SIZE, ARCHIVE_SIZE, NUM_GENERATIONS,
-            foods_df, nutrients_df, dri_df, user_info, CROSSOVER_RATE
+            foods_df, nutrients_df, dri_df, user_info, CROSSOVER_RATE,diversity_enabled=diversity_enabled
         )
         for sol in spea2_pf:
             all_fitness.append(sol["fitness"])
@@ -285,7 +314,7 @@ def _run_single_comparison(breakfast_ids, lunch_ids,
         nsga2_pf, nsga2_hv = run_nsga2(
             breakfast_ids, lunch_ids, POP_SIZE, NUM_GENERATIONS,
             foods_df, nutrients_df, dri_df, user_info, CROSSOVER_RATE,
-            ref_point=ref_point
+            ref_point=ref_point,diversity_enabled=diversity_enabled
         )
         nsga2_results.append(nsga2_pf)
         nsga2_hv_histories.append(nsga2_hv)
@@ -295,7 +324,7 @@ def _run_single_comparison(breakfast_ids, lunch_ids,
         spea2_pf, spea2_hv = run_spea2(
             breakfast_ids, lunch_ids, POP_SIZE, ARCHIVE_SIZE, NUM_GENERATIONS,
             foods_df, nutrients_df, dri_df, user_info, CROSSOVER_RATE,
-            ref_point=ref_point
+            ref_point=ref_point,diversity_enabled=diversity_enabled
         )
         spea2_results.append(spea2_pf)
         spea2_hv_histories.append(spea2_hv)
@@ -366,6 +395,11 @@ def experiment_user_comparison(breakfast_ids, lunch_ids,
         f"user1_nsga2_run{run+1}.json",
         "user1_nsga2"
     )
+        save_sample_menu_to_json(
+        result_u1["nsga2_results"][run],
+        f"user1_nsga2_menu_run{run+1}.json",
+        "user1_nsga2"
+   )
 
         save_pareto_to_csv(
         result_u1["spea2_results"][run],
@@ -376,6 +410,11 @@ def experiment_user_comparison(breakfast_ids, lunch_ids,
         save_pareto_to_json(
         result_u1["spea2_results"][run],
         f"user1_spea2_run{run+1}.json",
+        "user1_spea2"
+    )
+        save_sample_menu_to_json(
+        result_u1["spea2_results"][run],
+        f"user1_spea2_menu_run{run+1}.json",
         "user1_spea2"
     )
 
@@ -390,6 +429,11 @@ def experiment_user_comparison(breakfast_ids, lunch_ids,
         f"user2_nsga2_run{run+1}.json",
         "user2_nsga2"
     )
+        save_sample_menu_to_json(
+        result_u2["nsga2_results"][run],
+        f"user2_nsga2_menu_run{run+1}.json",
+        "user2_nsga2"
+    )
 
         save_pareto_to_csv(
         result_u2["spea2_results"][run],
@@ -402,6 +446,11 @@ def experiment_user_comparison(breakfast_ids, lunch_ids,
         f"user2_spea2_run{run+1}.json",
         "user2_spea2"
     )
+        save_sample_menu_to_json(
+        result_u2["spea2_results"][run],
+        f"user2_spea2_menu_run{run+1}.json",
+        "user2_spea2"
+   )
 
     return result_u1, result_u2
 
@@ -432,11 +481,32 @@ def experiment_algorithm_comparison(breakfast_ids, lunch_ids,
                                 f"convergence_spea2_run{run+1}.csv", "SPEA2")
 
     # Pareto front CSV
+    # Pareto front CSV
     for run in range(NUM_RUNS):
-        save_pareto_to_csv(result["nsga2_results"][run],
-                           f"algo_nsga2_run{run+1}.csv", "nsga2")
-        save_pareto_to_csv(result["spea2_results"][run],
-                           f"algo_spea2_run{run+1}.csv", "spea2")
+
+        save_pareto_to_csv(
+            result["nsga2_results"][run],
+            f"algo_nsga2_run{run+1}.csv",
+            "nsga2"
+       )
+
+        save_sample_menu_to_json(
+            result["nsga2_results"][run],
+            f"algo_nsga2_menu_run{run+1}.json",
+            "algo_nsga2"
+        )
+
+        save_pareto_to_csv(
+            result["spea2_results"][run],
+            f"algo_spea2_run{run+1}.csv",
+            "spea2"
+       )
+
+        save_sample_menu_to_json(
+            result["spea2_results"][run],
+            f"algo_spea2_menu_run{run+1}.json",
+            "algo_spea2"
+       )
 
     return result
 
@@ -454,29 +524,52 @@ def experiment_diversity_impact(breakfast_ids, lunch_ids,
     print("# DENEY 3: DIVERSITY ETKISI")
     print("#" * 60)
 
-    # TODO: Gorev 3 tamamlaninca, evaluate fonksiyonuna diversity_enabled
-    # parametresi eklenecek. Su an her iki senaryo da ayni sonucu verir.
+    # Diversity mekanizmasi aktif.
+    # Diversity ON/OFF senaryolari karsilastirilmaktadir.
 
     print("\n--- Diversity KAPALI ---")
     result_off = _run_single_comparison(
         breakfast_ids, lunch_ids,
         foods_df, nutrients_df, dri_df, user_info,
-        label="Diversity KAPALI"
+        label="Diversity KAPALI",
+        diversity_enabled=False
     )
 
     print("\n--- Diversity ACIK ---")
     result_on = _run_single_comparison(
         breakfast_ids, lunch_ids,
         foods_df, nutrients_df, dri_df, user_info,
-        label="Diversity ACIK"
+        label="Diversity ACIK",
+        diversity_enabled=True
     )
 
+   
     # CSV kaydet
     for run in range(NUM_RUNS):
-        save_pareto_to_csv(result_off["nsga2_results"][run],
-                           f"div_off_nsga2_run{run+1}.csv", "diversity_off_nsga2")
-        save_pareto_to_csv(result_on["nsga2_results"][run],
-                           f"div_on_nsga2_run{run+1}.csv", "diversity_on_nsga2")
+
+        save_pareto_to_csv(
+            result_off["nsga2_results"][run],
+            f"div_off_nsga2_run{run+1}.csv",
+            "diversity_off_nsga2"
+        )
+
+        save_sample_menu_to_json(
+            result_off["nsga2_results"][run],
+            f"div_off_nsga2_menu_run{run+1}.json",
+            "diversity_off_nsga2"
+        )
+
+        save_pareto_to_csv(
+            result_on["nsga2_results"][run],
+            f"div_on_nsga2_run{run+1}.csv",
+            "diversity_on_nsga2"
+       )
+
+        save_sample_menu_to_json(
+            result_on["nsga2_results"][run],
+            f"div_on_nsga2_menu_run{run+1}.json",
+            "diversity_on_nsga2"
+        )
 
     return result_off, result_on
 
