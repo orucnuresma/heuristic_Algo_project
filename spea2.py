@@ -110,7 +110,7 @@ def run_spea2(breakfast_ids, lunch_ids, pop_size, archive_size, num_generations,
 
     pop_fitness = [
         evaluate(ind, foods_df, nutrients_df, dri_df, user_info, diversity_enabled, user_foods_df)
-        for ind in population
+        for ind in population 
     ]
 
     archive = []
