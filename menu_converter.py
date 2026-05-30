@@ -27,10 +27,6 @@ table = pd.DataFrame({
 })
 
 print(table)
-table.to_csv(
-    "sample_menu_table.csv",
-    index=False,
-    encoding="utf-8-sig"
-)
+table.to_excel("sample_menu.xlsx", index=False)
 
 print("csv dosyası oluşturuldu: sample_menu_table.csv")
